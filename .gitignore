@@ -1,0 +1,5 @@
+bin/
+obj/
+.vs/
+*.user
+src/WinVideoTools/ffmpeg/ffmpeg.exe

@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WinVideoTools/WinVideoTools.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ConverterCheck/ConverterCheck.csproj" />
+    <Project Path="tests/FfmpegCheck/FfmpegCheck.csproj" />
+    <Project Path="tests/SimilarVideosCheck/SimilarVideosCheck.csproj" />
+    <Project Path="tests/VideoCheckerCheck/VideoCheckerCheck.csproj" />
+  </Folder>
+</Solution>

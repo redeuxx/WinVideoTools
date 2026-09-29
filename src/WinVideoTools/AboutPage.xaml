@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="WinVideoTools.AboutPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Padding="32" Spacing="16" MaxWidth="720" HorizontalAlignment="Left">
+        <TextBlock Text="WinVideoTools" Style="{StaticResource TitleTextBlockStyle}" />
+        <Grid ColumnSpacing="24" RowSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+            </Grid.RowDefinitions>
+            <TextBlock Text="Version" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <TextBlock x:Name="VersionText" Grid.Column="1" IsTextSelectionEnabled="True" />
+            <TextBlock Grid.Row="1" Text="Build time" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <TextBlock x:Name="BuildTimeText" Grid.Row="1" Grid.Column="1" IsTextSelectionEnabled="True" />
+            <TextBlock Grid.Row="2" Text="Runtime" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <TextBlock x:Name="RuntimeText" Grid.Row="2" Grid.Column="1" IsTextSelectionEnabled="True" />
+            <TextBlock Grid.Row="3" Text="FFmpeg" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <TextBlock x:Name="FfmpegText" Grid.Row="3" Grid.Column="1" IsTextSelectionEnabled="True" TextWrapping="Wrap" Text="Checking..." />
+        </Grid>
+        <TextBlock Text="Licensed under the MIT License." />
+        <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+            This software bundles FFmpeg (https://ffmpeg.org), licensed under the GNU GPL / LGPL.
+            FFmpeg source code is available from https://ffmpeg.org/download.html.
+        </TextBlock>
+    </StackPanel>
+</Page>

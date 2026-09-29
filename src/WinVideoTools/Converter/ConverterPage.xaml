@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="WinVideoTools.Converter.ConverterPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:WinVideoTools.Converter"
+    NavigationCacheMode="Required">
+    <Grid Padding="24" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Convert" Style="{StaticResource TitleTextBlockStyle}" />
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+            <ComboBox x:Name="PresetBox" Header="HandBrake preset" PlaceholderText="Import a preset to start" Width="360"
+                      SelectionChanged="PresetBox_SelectionChanged" />
+            <Button x:Name="ImportButton" Content="Import..." Click="Import_Click" VerticalAlignment="Bottom"
+                    ToolTipService.ToolTip="Import presets from a HandBrake preset file and save them for later" />
+            <Button x:Name="ExportButton" Content="Export..." Click="Export_Click" IsEnabled="False" VerticalAlignment="Bottom"
+                    ToolTipService.ToolTip="Save the selected preset as a file HandBrake can import" />
+            <Button x:Name="DeletePresetButton" Content="Delete" Click="DeletePreset_Click" IsEnabled="False" VerticalAlignment="Bottom" />
+        </StackPanel>
+
+        <TextBlock x:Name="PresetNotes" Grid.Row="2" TextWrapping="Wrap" Visibility="Collapsed"
+                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+        <Grid Grid.Row="3" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <CheckBox x:Name="SameFolderBox" Content="Save next to the source file" VerticalAlignment="Center"
+                      Checked="Setting_Changed" Unchecked="Setting_Changed" />
+            <TextBox x:Name="OutputBox" Grid.Column="1" PlaceholderText="Output folder" AutomationProperties.Name="Output folder" />
+            <Button x:Name="BrowseOutputButton" Grid.Column="2" Content="Browse..." Click="BrowseOutput_Click" />
+        </Grid>
+
+        <!-- Takes no space until shown. The checkboxes keep their names, so code reads them as before. -->
+        <ContentDialog x:Name="OptionsDialog" Title="Convert options" CloseButtonText="Close" DefaultButton="Close">
+            <StackPanel Spacing="12">
+                <StackPanel Spacing="4">
+                    <CheckBox x:Name="SkipHevcBox" Content="Skip files already in HEVC (H.265)"
+                              Checked="Setting_Changed" Unchecked="Setting_Changed" />
+                    <CheckBox x:Name="SkipHevc1080Box" Content="Only if 1080p or smaller" Margin="28,0,0,0"
+                              Checked="Setting_Changed" Unchecked="Setting_Changed"
+                              ToolTipService.ToolTip="Skips HEVC files whose shorter side is 1080 pixels or less; larger HEVC files are still converted" />
+                </StackPanel>
+                <CheckBox x:Name="DeleteLargerBox" Content="Delete output if larger than original"
+                          Checked="Setting_Changed" Unchecked="Setting_Changed" />
+                <StackPanel Spacing="4">
+                    <CheckBox x:Name="DeleteOriginalBox" Content="Delete original if output is smaller" />
+                    <TextBlock Margin="28,0,0,0" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Text="Permanently deletes the source after a full-length conversion that saved space. Not remembered between sessions; you confirm it each time you convert." />
+                </StackPanel>
+            </StackPanel>
+        </ContentDialog>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="8">
+            <Button x:Name="AddFilesButton" Content="Add files..." Click="AddFiles_Click" />
+            <Button x:Name="AddFolderButton" Content="Add folder..." Click="AddFolder_Click"
+                    ToolTipService.ToolTip="Adds every video in the folder and its subfolders" />
+            <Button x:Name="RemoveButton" Content="Remove selected" Click="Remove_Click" IsEnabled="False" />
+            <Button x:Name="ClearButton" Content="Clear list" Click="Clear_Click" IsEnabled="False" />
+            <Button x:Name="OptionsButton" Click="Options_Click" AutomationProperties.Name="Options"
+                    ToolTipService.ToolTip="Skip HEVC files and delete options">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE713;" FontSize="14" />
+                    <TextBlock Text="Options..." />
+                </StackPanel>
+            </Button>
+            <Button x:Name="ConvertButton" Content="Convert" Style="{StaticResource AccentButtonStyle}" Click="Convert_Click" IsEnabled="False" />
+            <Button x:Name="PauseButton" Content="Pause" Click="Pause_Click" IsEnabled="False"
+                    ToolTipService.ToolTip="Let the current file finish, then hold the rest of the queue until you resume" />
+            <CheckBox x:Name="AutoScrollBox" Content="Auto-scroll" Margin="8,0,0,0" VerticalAlignment="Center"
+                      Checked="Setting_Changed" Unchecked="Setting_Changed"
+                      ToolTipService.ToolTip="Scroll the list to each file as it starts converting" />
+            <CheckBox x:Name="ShutdownBox" Content="Shut down when finished" VerticalAlignment="Center"
+                      ToolTipService.ToolTip="After the whole queue finishes, shut down Windows following a 60-second countdown you can cancel. Not remembered between sessions." />
+        </StackPanel>
+
+        <StackPanel Grid.Row="5" Spacing="4">
+            <InfoBar x:Name="Info" IsOpen="False" />
+            <TextBlock x:Name="SummaryText" />
+            <ProgressBar x:Name="OverallProgress" Maximum="1" Visibility="Collapsed" />
+        </StackPanel>
+
+        <Grid Grid.Row="6" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <!-- Outside the ListView so it stays put while the list scrolls; padding matches the item container's margin + padding. -->
+            <Grid ColumnSpacing="12" Padding="20,8,16,8" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90" />
+                    <ColumnDefinition Width="3*" />
+                    <ColumnDefinition Width="160" />
+                    <ColumnDefinition Width="130" />
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="2*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Status" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <TextBlock Grid.Column="1" Text="File" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <TextBlock Grid.Column="2" Text="Size" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <TextBlock Grid.Column="3" Text="Size change" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <TextBlock Grid.Column="4" Text="Result" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <TextBlock Grid.Column="5" Text="Decision" Style="{StaticResource BodyStrongTextBlockStyle}" />
+            </Grid>
+        <ListView x:Name="Queue" Grid.Row="1" SelectionMode="Extended" SelectionChanged="Queue_SelectionChanged" DoubleTapped="Queue_DoubleTapped">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="local:ConvertItem">
+                    <Grid ColumnSpacing="12" Padding="0,6" Background="Transparent">
+                        <Grid.ContextFlyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem Text="Open original" Tag="{x:Bind Path}" IsEnabled="{x:Bind HasOriginal, Mode=OneWay}" Click="Open_Click">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE768;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Open output" Tag="{x:Bind OutputPath, Mode=OneWay}" IsEnabled="{x:Bind HasOutput, Mode=OneWay}" Click="Open_Click">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE768;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                            </MenuFlyout>
+                        </Grid.ContextFlyout>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="3*" />
+                            <ColumnDefinition Width="160" />
+                            <ColumnDefinition Width="130" />
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="2*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{x:Bind StatusText, Mode=OneWay}" Foreground="{x:Bind StatusBrush, Mode=OneWay}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Path}" />
+                        <TextBlock Grid.Column="2" Text="{x:Bind SizesText, Mode=OneWay}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                   ToolTipService.ToolTip="Original size, then output size" />
+                        <TextBlock Grid.Column="3" Text="{x:Bind SizeChangeText, Mode=OneWay}" Foreground="{x:Bind SizeChangeBrush, Mode=OneWay}"
+                                   VerticalAlignment="Center" ToolTipService.ToolTip="Output size compared with the original" />
+                        <TextBlock Grid.Column="5" Text="{x:Bind Decision, Mode=OneWay}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                   ToolTipService.ToolTip="{x:Bind Decision, Mode=OneWay}" />
+                        <Grid Grid.Column="4" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Bind Summary, Mode=OneWay}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{x:Bind Summary, Mode=OneWay}" />
+                            <Grid ColumnSpacing="8" Visibility="{x:Bind IsConverting, Mode=OneWay}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="40" />
+                                </Grid.ColumnDefinitions>
+                                <ProgressBar Value="{x:Bind Progress, Mode=OneWay}" Maximum="1" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{x:Bind PercentText, Mode=OneWay}" HorizontalTextAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+        </Grid>
+
+        <TextBox x:Name="DetailsBox" Grid.Row="7" Header="ffmpeg command and log for selected file" IsReadOnly="True" TextWrapping="Wrap"
+                 AcceptsReturn="True" Height="140" FontFamily="Consolas" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+    </Grid>
+</Page>

@@ -529,9 +529,12 @@ public sealed partial class ConverterPage : Page
                 item.InputSize = inSize;
                 item.OutputSize = outSize;
                 if (inSize > 0) item.SizeRatio = (double)outSize / inSize;
-                fileDecision = await Task.Run(() => ApplySizeRules(item.Path, output, inSize, outSize, deleteLarger, deleteOriginal));
-                if (!File.Exists(output)) item.OutputPath = null;
-                item.OriginalDeleted = !File.Exists(item.Path);
+                var original = output;
+                (fileDecision, output) = await Task.Run(() => ApplySizeRules(item.Path, original, inSize, outSize, deleteLarger, deleteOriginal));
+                // A renamed output now sits at the source path, so the source existing no longer means it was kept.
+                item.OriginalDeleted = output != original || !File.Exists(item.Path);
+                item.OutputPath = File.Exists(output) ? output : null;
+                item.Summary = $"{Path.GetFileName(output)}: {result.Summary}";
             }
             item.Decision = string.Join("; ", [fileDecision, .. result.Notes]);
         }
@@ -555,28 +558,41 @@ public sealed partial class ConverterPage : Page
     /// After a successful conversion: drop an output that grew, or delete a source that shrank.
     /// ConvertAsync already rejected short outputs, so a smaller file here is a complete one.
     /// </summary>
-    /// <returns>What was done with the two files, for the Decision column.</returns>
-    private static string ApplySizeRules(string source, string output, long inSize, long outSize, bool deleteLarger, bool deleteOriginal)
+    /// <returns>What was done with the two files, for the Decision column, and where the output ended up.</returns>
+    private static (string Decision, string Output) ApplySizeRules(string source, string output, long inSize, long outSize, bool deleteLarger, bool deleteOriginal)
     {
         try
         {
             if (outSize > inSize)
             {
-                if (!deleteLarger) return "Kept both; output is larger";
+                if (!deleteLarger) return ("Kept both; output is larger", output);
                 File.Delete(output);
-                return "Output deleted: larger than original";
+                return ("Output deleted: larger than original", output);
             }
             if (outSize < inSize)
             {
-                if (!deleteOriginal) return "Kept both";
+                if (!deleteOriginal) return ("Kept both", output);
                 File.Delete(source);
-                return "Original deleted: output is smaller";
             }
-            return "Kept both; same size";
+            else return ("Kept both; same size", output);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return $"Kept both; could not delete {(outSize > inSize ? "output" : "original")}: {ex.Message}";
+            return ($"Kept both; could not delete {(outSize > inSize ? "output" : "original")}: {ex.Message}", output);
+        }
+
+        // OutputPathFor numbered the output only because the source held its name; with the source gone, take the name back.
+        var wanted = Path.Combine(Path.GetDirectoryName(output)!, Path.GetFileNameWithoutExtension(source) + Path.GetExtension(output));
+        if (!string.Equals(Path.GetFullPath(wanted), Path.GetFullPath(source), StringComparison.OrdinalIgnoreCase))
+            return ("Original deleted: output is smaller", output);
+        try
+        {
+            File.Move(output, source);
+            return ("Original deleted: output is smaller; output renamed to original name", source);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return ($"Original deleted: output is smaller; could not rename output: {ex.Message}", output);
         }
     }
 

@@ -138,7 +138,6 @@ public sealed partial class ConverterPage : Page
         }
     }
 
-    // Options are read when Convert is pressed, so the button is disabled while a queue runs.
     private async void Options_Click(object sender, RoutedEventArgs e) => await OptionsDialog.ShowAsync();
 
     private void Setting_Changed(object sender, RoutedEventArgs e)
@@ -607,9 +606,11 @@ public sealed partial class ConverterPage : Page
         PauseButton.IsEnabled = busy;
         PresetBox.IsEnabled = ImportButton.IsEnabled = !busy;
         ExportButton.IsEnabled = DeletePresetButton.IsEnabled = !busy && hasPreset;
+        // Options are read when Convert is pressed, so the dialog stays viewable but read-only while a queue runs.
         // An option that depends on another is greyed out while that one is off.
-        SkipHevc1080Box.IsEnabled = SkipHevcBox.IsChecked == true;
-        OptionsButton.IsEnabled = SameFolderBox.IsEnabled = AddFilesButton.IsEnabled = AddFolderButton.IsEnabled = !busy;
+        SkipHevcBox.IsEnabled = DeleteLargerBox.IsEnabled = DeleteOriginalBox.IsEnabled = !busy;
+        SkipHevc1080Box.IsEnabled = !busy && SkipHevcBox.IsChecked == true;
+        SameFolderBox.IsEnabled = AddFilesButton.IsEnabled = AddFolderButton.IsEnabled = !busy;
         OutputBox.IsEnabled = BrowseOutputButton.IsEnabled = !busy && SameFolderBox.IsChecked != true;
         RemoveButton.IsEnabled = !busy && Queue.SelectedItems.Count > 0;
         ClearButton.IsEnabled = !busy && _items.Count > 0;

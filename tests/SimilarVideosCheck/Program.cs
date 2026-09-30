@@ -68,6 +68,7 @@ Check(groups.Count == 1 && groups[0] == "a bottom bar.mkv, a boxed.mp4, a small.
 
 // DETAILS
 Check(prints[0].Codec == "h264", "codec read from stream info");
+Check(prints[0].VideoBitrate > 0 && prints[1].VideoBitrate == 0, "video bit rate read from MP4, absent in MKV");
 var jpeg = await VideoFingerprint.ScreenshotAsync(ffmpeg, P("a.mp4"), prints[0].Duration / 2, CancellationToken.None);
 Check(jpeg is [0xFF, 0xD8, ..], "screenshot is a JPEG");
 

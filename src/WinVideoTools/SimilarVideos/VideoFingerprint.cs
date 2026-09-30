@@ -23,6 +23,9 @@ public sealed partial record VideoFingerprint(double Duration, int Width, int He
     /// <summary>The drift, in seconds, the bursts were sized for. Fingerprints only compare well with the same setting.</summary>
     public double MaxDrift { get; init; }
 
+    /// <summary>Video stream bit rate in kb/s as the container reports it; 0 when it does not (MKV, WebM).</summary>
+    public int VideoBitrate { get; init; }
+
     // Bits (of 64) two frame hashes may differ by and still count as the same picture.
     private const int MaxFrameDistance = 10;
     // Share of the sparser video's frames that must find a match in the other video.
@@ -45,13 +48,16 @@ public sealed partial record VideoFingerprint(double Duration, int Width, int He
     [GeneratedRegex(@"Stream #\d+:\d+.*?: Video: (\w+).*?, (\d{2,5})x(\d{2,5})")]
     private static partial Regex VideoStreamLine();
 
+    [GeneratedRegex(@", (\d+) kb/s")]
+    private static partial Regex StreamBitrate();
+
     public static async Task<VideoFingerprint> ComputeAsync(string ffmpegPath, string file, double maxDrift, CancellationToken ct)
     {
         maxDrift = Math.Clamp(maxDrift, 0.1, MaxMaxDrift);
         // With no output ffmpeg just prints the input info and exits non-zero; that is expected.
         var (_, info) = await RunFfmpegAsync(ffmpegPath, ["-i", "file:" + file], ct).ConfigureAwait(false);
         double duration = 0;
-        int width = 0, height = 0;
+        int width = 0, height = 0, bitrate = 0;
         var codec = "";
         foreach (var line in info.Split('\n'))
         {
@@ -61,6 +67,7 @@ public sealed partial record VideoFingerprint(double Duration, int Width, int He
                 codec = m.Groups[1].Value;
                 width = int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture);
                 height = int.Parse(m.Groups[3].Value, CultureInfo.InvariantCulture);
+                if (StreamBitrate().Match(line) is { Success: true } b) int.TryParse(b.Groups[1].Value, CultureInfo.InvariantCulture, out bitrate);
             }
         }
         if (duration <= 0 || width == 0) throw new InvalidDataException("Could not read video duration or resolution.");
@@ -85,7 +92,7 @@ public sealed partial record VideoFingerprint(double Duration, int Width, int He
             // Kept even when empty (all flat frames), so sample i is the same moment in every fingerprint.
             samples.Add(burst);
         }
-        return new VideoFingerprint(duration, width, height, codec, [.. samples]) { MaxDrift = maxDrift };
+        return new VideoFingerprint(duration, width, height, codec, [.. samples]) { MaxDrift = maxDrift, VideoBitrate = bitrate };
     }
 
     /// <summary>A JPEG of the frame at <paramref name="at"/> seconds, scaled down to at most 960 pixels wide.</summary>

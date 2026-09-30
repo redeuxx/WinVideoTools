@@ -29,6 +29,11 @@ public sealed class DuplicateFile(string path, long size, VideoFingerprint finge
     // Container from the extension, codec as ffmpeg names it, e.g. "MP4 (h264)".
     public string Format => $"{System.IO.Path.GetExtension(Path).TrimStart('.').ToUpperInvariant()} ({_fingerprint.Codec})";
 
+    // Video stream rate when the container reports it, else "~" and the whole file's rate (audio included).
+    public string Bitrate => _fingerprint.VideoBitrate > 0 ? $"{_fingerprint.VideoBitrate} kb/s"
+        : _fingerprint.Duration > 0 ? $"~{Size * 8 / _fingerprint.Duration / 1000:0} kb/s"
+        : "";
+
     // Not "Info": a template property sharing a name with a page element (the InfoBar) crashes the XAML compiler (WMC9999).
     public string Description => $"{TimeSpan.FromSeconds(Math.Round(_fingerprint.Duration)):g}   {FormatSize(Size)}";
 

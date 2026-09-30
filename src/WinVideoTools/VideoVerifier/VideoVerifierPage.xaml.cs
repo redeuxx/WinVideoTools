@@ -333,10 +333,15 @@ public sealed partial class VideoVerifierPage : Page
         SummaryText.Text = $"{_items.Count} files: {_valid} valid, {_invalid} invalid, {_items.Count - _done} not checked";
     }
 
-    private void ShowInfo(InfoBarSeverity severity, string message)
+    // Closes itself after 10 seconds unless a newer message has replaced it; errors stay until dismissed.
+    private async void ShowInfo(InfoBarSeverity severity, string message)
     {
         Info.Severity = severity;
         Info.Message = message;
         Info.IsOpen = true;
+        var shown = Info.Tag = new object();
+        if (severity == InfoBarSeverity.Error) return;
+        await Task.Delay(TimeSpan.FromSeconds(10));
+        if (Info.Tag == shown) Info.IsOpen = false;
     }
 }

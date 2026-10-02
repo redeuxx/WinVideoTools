@@ -117,12 +117,32 @@ public sealed partial class SimilarVideosPage : Page
         try
         {
             var recurse = RecurseBox.IsChecked == true;
-            // Overlapping folders (a folder and its subfolder) would list a file twice; keep one.
-            var files = await Task.Run(() => folders
-                .SelectMany(f => VideoFiles.Find(f, recurse, ct))
-                .DistinctBy(f => f.FullName, StringComparer.OrdinalIgnoreCase)
-                .OrderBy(f => f.FullName, StringComparer.OrdinalIgnoreCase)
-                .ToList(), ct);
+            // Listing a large tree can take a while; show it moving. Reports can land after listing ends, so they stop at "listing".
+            var listing = true;
+            var earlier = 0;
+            OverallProgress.IsIndeterminate = true;
+            var found = new Progress<int>(n => { if (listing) SummaryText.Text = $"Finding videos... {earlier + n:N0} found"; });
+            List<FileInfo> files;
+            try
+            {
+                // Overlapping folders (a folder and its subfolder) would list a file twice; keep one.
+                files = await Task.Run(() => folders
+                    .SelectMany(f =>
+                    {
+                        var list = VideoFiles.Find(f, recurse, ct, found);
+                        // Only this thread writes it; the UI reading a stale value just makes the count lag a moment.
+                        earlier += list.Count;
+                        return list;
+                    })
+                    .DistinctBy(f => f.FullName, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(f => f.FullName, StringComparer.OrdinalIgnoreCase)
+                    .ToList(), ct);
+            }
+            finally
+            {
+                listing = false;
+                OverallProgress.IsIndeterminate = false;
+            }
             if (files.Count == 0)
             {
                 SummaryText.Text = "";
@@ -170,7 +190,11 @@ public sealed partial class SimilarVideosPage : Page
             foreach (var i in readable)
                 _fingerprints[files[i].FullName] = (files[i].Length, files[i].LastWriteTimeUtc, prints[i]!);
 
-            var groups = await Task.Run(() => VideoFingerprint.Group(readable.Select(i => prints[i]!).ToList()), ct);
+            SummaryText.Text = $"Comparing {readable.Count:N0} videos...";
+            OverallProgress.IsIndeterminate = true;
+            List<List<int>> groups;
+            try { groups = await Task.Run(() => VideoFingerprint.Group(readable.Select(i => prints[i]!).ToList()), ct); }
+            finally { OverallProgress.IsIndeterminate = false; }
             foreach (var indexes in groups)
             {
                 var members = indexes.Select(j => readable[j]).Select(i =>

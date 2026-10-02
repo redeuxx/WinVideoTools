@@ -28,6 +28,10 @@ public sealed partial class ConverterPage : Page
     // "Delete original" is deliberately not remembered: deleting sources should be chosen each session.
     private sealed record Settings(string OutputFolder, bool? SameFolder, bool DeleteLarger = false, bool SkipHevc = false, bool SkipHevcUpTo1080p = false, bool AutoScroll = true);
     private CancellationTokenSource? _cts;
+    // True while a folder is being listed; the queue is locked until its files are in.
+    private bool _adding;
+    // True while AddPaths fills _items, so the list syncs once at the end rather than once per file.
+    private bool _bulkAdding;
     // Non-null while paused; completing it lets the queue continue.
     private TaskCompletionSource? _resume;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -46,6 +50,7 @@ public sealed partial class ConverterPage : Page
         {
             foreach (var item in e.NewItems?.OfType<ConvertItem>() ?? [])
                 item.PropertyChanged += (_, p) => { if (p.PropertyName == nameof(ConvertItem.Status)) SyncView(); };
+            if (_bulkAdding) return;
             SyncView();
             SetBusy(_cts is not null);
         };
@@ -58,7 +63,7 @@ public sealed partial class ConverterPage : Page
         SkipHevc1080Box.IsChecked = settings.SkipHevcUpTo1080p;
         AutoScrollBox.IsChecked = settings.AutoScroll;
         _settingsLoaded = true;
-        FileDrop.Attach(this, "Add to queue", () => _cts is null, OnDropAsync);
+        FileDrop.Attach(this, "Add to queue", () => _cts is null && !_adding, OnDropAsync);
         WatchManualScrolling();
     }
 
@@ -113,7 +118,7 @@ public sealed partial class ConverterPage : Page
     // Dropped folders are searched like Add folder, including subfolders.
     private async Task OnDropAsync(IReadOnlyList<string> folders, IReadOnlyList<string> files)
     {
-        AddPaths(files);
+        AddPaths(files.Select(f => new FileInfo(f)));
         foreach (var folder in folders) await AddFolderAsync(folder);
     }
 
@@ -260,7 +265,7 @@ public sealed partial class ConverterPage : Page
         var picker = new FileOpenPicker(App.MainWindow!.AppWindow.Id);
         picker.FileTypeFilter.Add("*");
         var files = await picker.PickMultipleFilesAsync();
-        AddPaths(files.Select(f => f.Path));
+        AddPaths(files.Select(f => new FileInfo(f.Path)));
     }
 
     private async void AddFolder_Click(object sender, RoutedEventArgs e)
@@ -270,33 +275,55 @@ public sealed partial class ConverterPage : Page
 
     private async Task AddFolderAsync(string folder)
     {
+        // Listing a large tree can take a while; show it moving. Reports can land after Find returns, so they stop at _adding.
+        _adding = true;
+        SetBusy(_cts is not null);
+        SummaryText.Text = $"Finding videos in {folder}...";
+        var found = new Progress<int>(n => { if (_adding) SummaryText.Text = $"Finding videos in {folder}... {n:N0} found"; });
         try
         {
-            var files = await Task.Run(() => VideoFiles.Find(folder, recurse: true, CancellationToken.None));
-            AddPaths(files.Select(f => f.FullName));
+            var files = await Task.Run(() => VideoFiles.Find(folder, recurse: true, CancellationToken.None, found));
+            AddPaths(files);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             ShowInfo(InfoBarSeverity.Error, ex.Message);
         }
+        finally
+        {
+            _adding = false;
+            SetBusy(_cts is not null);
+            UpdateSummary();
+        }
     }
 
-    private void AddPaths(IEnumerable<string> paths)
+    // Sizes come from the FileInfo; ones from a folder listing are already filled in, so no disk access per file.
+    private void AddPaths(IEnumerable<FileInfo> files)
     {
         var known = _items.Select(i => i.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var skipped = 0;
-        foreach (var path in paths)
+        _bulkAdding = true;
+        try
         {
-            if (!VideoFiles.IsVideo(path)) skipped++;
-            else if (known.Add(path)) _items.Add(new ConvertItem(path, SizeOf(path)));
+            foreach (var file in files)
+            {
+                if (!VideoFiles.IsVideo(file.FullName)) skipped++;
+                else if (known.Add(file.FullName)) _items.Add(new ConvertItem(file.FullName, SizeOf(file)));
+            }
         }
+        finally
+        {
+            _bulkAdding = false;
+        }
+        SyncView();
+        SetBusy(_cts is not null);
         if (skipped > 0) ShowInfo(InfoBarSeverity.Informational, $"Skipped {skipped} file{(skipped == 1 ? "" : "s")} that are not videos.");
         UpdateSummary();
     }
 
-    private static long SizeOf(string path)
+    private static long SizeOf(FileInfo file)
     {
-        try { return new FileInfo(path).Length; }
+        try { return file.Length; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return 0; }
     }
 
@@ -422,6 +449,8 @@ public sealed partial class ConverterPage : Page
         _cts = new CancellationTokenSource();
         _clock.Start();
         var ct = _cts.Token;
+        // Reset here, not in SetBusy, which also runs on every selection change and pause mid-run.
+        OverallProgress.Value = 0;
         SetBusy(true);
         var done = 0;
         var finished = false;
@@ -644,7 +673,7 @@ public sealed partial class ConverterPage : Page
     {
         var hasPreset = Preset is not null;
         ConvertButton.Content = busy ? "Cancel" : "Convert";
-        ConvertButton.IsEnabled = busy || (hasPreset && _items.Count > 0);
+        ConvertButton.IsEnabled = busy || (!_adding && hasPreset && _items.Count > 0);
         PauseButton.Content = _resume is null ? "Pause" : "Resume";
         PauseButton.IsEnabled = busy;
         PresetBox.IsEnabled = ImportButton.IsEnabled = !busy;
@@ -653,12 +682,13 @@ public sealed partial class ConverterPage : Page
         // An option that depends on another is greyed out while that one is off.
         SkipHevcBox.IsEnabled = DeleteLargerBox.IsEnabled = DeleteOriginalBox.IsEnabled = !busy;
         SkipHevc1080Box.IsEnabled = !busy && SkipHevcBox.IsChecked == true;
-        SameFolderBox.IsEnabled = AddFilesButton.IsEnabled = AddFolderButton.IsEnabled = !busy;
+        SameFolderBox.IsEnabled = !busy;
+        AddFilesButton.IsEnabled = AddFolderButton.IsEnabled = !busy && !_adding;
         OutputBox.IsEnabled = BrowseOutputButton.IsEnabled = !busy && SameFolderBox.IsChecked != true;
-        RemoveButton.IsEnabled = !busy && Queue.SelectedItems.Count > 0;
-        ClearButton.IsEnabled = !busy && _items.Count > 0;
-        OverallProgress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
-        if (busy) OverallProgress.Value = 0;
+        RemoveButton.IsEnabled = !busy && !_adding && Queue.SelectedItems.Count > 0;
+        ClearButton.IsEnabled = !busy && !_adding && _items.Count > 0;
+        OverallProgress.Visibility = busy || _adding ? Visibility.Visible : Visibility.Collapsed;
+        OverallProgress.IsIndeterminate = _adding && !busy;
     }
 
     private void UpdateSummary()

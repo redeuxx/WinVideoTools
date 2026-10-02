@@ -90,7 +90,18 @@ public sealed partial class VideoVerifierPage : Page
         try
         {
             var recurse = RecurseBox.IsChecked == true;
-            var files = await Task.Run(() => VideoFiles.Find(folder, recurse, ct), ct);
+            // Listing a large tree can take a while; show it moving. Reports can land after Find returns, so they stop at "listing".
+            var listing = true;
+            SummaryText.Text = "Finding videos...";
+            OverallProgress.IsIndeterminate = true;
+            var found = new Progress<int>(n => { if (listing) SummaryText.Text = $"Finding videos... {n:N0} found"; });
+            List<FileInfo> files;
+            try { files = await Task.Run(() => VideoFiles.Find(folder, recurse, ct, found), ct); }
+            finally
+            {
+                listing = false;
+                OverallProgress.IsIndeterminate = false;
+            }
 
             foreach (var f in files)
             {

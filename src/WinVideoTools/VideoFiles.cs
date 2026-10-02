@@ -15,16 +15,24 @@ public static class VideoFiles
     /// <summary>
     /// Video files under <paramref name="folder"/>, sorted by path. Inaccessible folders are skipped.
     /// Size and modified time come from the enumeration itself, so reading them costs no extra disk access.
+    /// <paramref name="found"/> hears the running count of videos now and then, for a progress line.
     /// </summary>
-    public static List<FileInfo> Find(string folder, bool recurse, CancellationToken ct) =>
-        new DirectoryInfo(folder).EnumerateFiles("*", new EnumerationOptions { RecurseSubdirectories = recurse, IgnoreInaccessible = true })
+    public static List<FileInfo> Find(string folder, bool recurse, CancellationToken ct, IProgress<int>? found = null)
+    {
+        int seen = 0, videos = 0;
+        return new DirectoryInfo(folder).EnumerateFiles("*", new EnumerationOptions { RecurseSubdirectories = recurse, IgnoreInaccessible = true })
             .Where(f =>
             {
                 ct.ThrowIfCancellationRequested();
-                return IsVideo(f.Name);
+                var video = IsVideo(f.Name);
+                if (video) videos++;
+                // Throttled, since each report is a hop to the UI thread.
+                if (++seen % 200 == 0) found?.Report(videos);
+                return video;
             })
             .OrderBy(f => f.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
 
     /// <summary>True when the file looks unchanged since it was listed with this size and time.</summary>
     public static bool IsUnchanged(FileInfo file, long size, DateTime modifiedUtc) =>

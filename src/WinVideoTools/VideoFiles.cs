@@ -39,4 +39,16 @@ public static class VideoFiles
         if (!IsVideo(path) || !File.Exists(path)) throw new FileNotFoundException("File not found.", path);
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose();
     }
+
+    /// <summary>Opens the file's folder in Explorer with the file selected.</summary>
+    public static void ShowInFolder(string path)
+    {
+        path = Path.GetFullPath(path);
+        if (!File.Exists(path)) throw new FileNotFoundException("File not found.", path);
+        // Explorer parses /select itself, so the path is quoted by hand. Windows names cannot hold a quote; refuse one anyway
+        // so it can never end the argument early.
+        if (path.Contains('"')) throw new ArgumentException("Path contains a quote.", nameof(path));
+        var explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+        Process.Start(new ProcessStartInfo(explorer, $"/select,\"{path}\"") { UseShellExecute = false })?.Dispose();
+    }
 }

@@ -312,6 +312,19 @@ public sealed partial class VideoVerifierPage : Page
         }
     }
 
+    private void ShowInFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not string path) return;
+        try
+        {
+            VideoFiles.ShowInFolder(path);
+        }
+        catch (Exception ex)
+        {
+            ShowInfo(InfoBarSeverity.Error, $"Could not open the folder for {path}: {ex.Message}");
+        }
+    }
+
     // STATE
 
     private void SetBusy(bool busy)

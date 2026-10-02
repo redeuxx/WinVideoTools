@@ -311,6 +311,19 @@ public sealed partial class SimilarVideosPage : Page
         }
     }
 
+    private void ShowInFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not string path) return;
+        try
+        {
+            VideoFiles.ShowInFolder(path);
+        }
+        catch (Exception ex)
+        {
+            ShowInfo(InfoBarSeverity.Error, $"Could not open the folder for {path}: {ex.Message}");
+        }
+    }
+
     // PREVIEW
 
     private async void Results_SelectionChanged(object sender, SelectionChangedEventArgs e)

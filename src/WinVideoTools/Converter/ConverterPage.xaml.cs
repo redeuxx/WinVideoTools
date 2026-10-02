@@ -14,6 +14,8 @@ namespace WinVideoTools.Converter;
 public sealed partial class ConverterPage : Page
 {
     private readonly ObservableCollection<ConvertItem> _items = [];
+    // What the list shows: _items in the same order, narrowed by the status filter.
+    private readonly ObservableCollection<ConvertItem> _view = [];
     private readonly PresetStore _store = PresetStore.Default;
 
     private static readonly string SettingsPath = Path.Combine(
@@ -33,12 +35,20 @@ public sealed partial class ConverterPage : Page
     public ConverterPage()
     {
         InitializeComponent();
-        Queue.ItemsSource = _items;
+        Queue.ItemsSource = _view;
+        FilterBox.ItemsSource = (string[])["All", .. Enum.GetNames<ConvertStatus>()];
+        FilterBox.SelectedIndex = 0;
         _clock.Tick += (_, _) =>
         {
             foreach (var item in _items.Where(i => i.IsConverting)) item.Tick();
         };
-        _items.CollectionChanged += (_, _) => SetBusy(_cts is not null);
+        _items.CollectionChanged += (_, e) =>
+        {
+            foreach (var item in e.NewItems?.OfType<ConvertItem>() ?? [])
+                item.PropertyChanged += (_, p) => { if (p.PropertyName == nameof(ConvertItem.Status)) SyncView(); };
+            SyncView();
+            SetBusy(_cts is not null);
+        };
         LoadPresets(null);
         var settings = LoadSettings();
         OutputBox.Text = settings.OutputFolder;
@@ -303,6 +313,26 @@ public sealed partial class ConverterPage : Page
         UpdateSummary();
     }
 
+    // FILTER
+
+    private void FilterBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => SyncView();
+
+    /// <summary>
+    /// Brings the shown list in line with the filter by removing and inserting in place, rather than
+    /// rebuilding it, so a status change mid-run does not reset scrolling or selection.
+    /// </summary>
+    private void SyncView()
+    {
+        var all = !Enum.TryParse<ConvertStatus>(FilterBox.SelectedItem as string, out var status);
+        var want = _items.Where(i => all || i.Status == status).ToList();
+        var keep = want.ToHashSet();
+        for (var i = _view.Count - 1; i >= 0; i--)
+            if (!keep.Contains(_view[i])) _view.RemoveAt(i);
+        // _view is now an in-order subset of want, so anything out of step at i is missing there.
+        for (var i = 0; i < want.Count; i++)
+            if (i >= _view.Count || _view[i] != want[i]) _view.Insert(i, want[i]);
+    }
+
     private void Queue_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         DetailsBox.Text = Queue.SelectedItems.Count == 1 && Queue.SelectedItems[0] is ConvertItem item ? item.Details : "";
@@ -395,7 +425,7 @@ public sealed partial class ConverterPage : Page
                     Info.IsOpen = false;
                 }
                 if (!_items.Contains(item)) continue;
-                if (AutoScrollBox.IsChecked == true) Queue.ScrollIntoView(item);
+                if (AutoScrollBox.IsChecked == true && _view.Contains(item)) Queue.ScrollIntoView(item);
                 var converting = ConvertOneAsync(item, preset, ffmpeg, outFolder, deleteLarger, deleteOriginal, skipHevc, skipHevcUpTo1080p, ct);
                 UpdateSummary();
                 try { await converting; }

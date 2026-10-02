@@ -90,7 +90,16 @@
 
         <StackPanel Grid.Row="5" Spacing="4">
             <InfoBar x:Name="Info" IsOpen="False" />
-            <TextBlock x:Name="SummaryText" />
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="SummaryText" VerticalAlignment="Center" TextWrapping="Wrap" />
+                <ComboBox x:Name="FilterBox" Grid.Column="1" MinWidth="140" AutomationProperties.Name="Show files with status"
+                          SelectionChanged="FilterBox_SelectionChanged"
+                          ToolTipService.ToolTip="Show only files with this status. Convert still runs every unfinished file in the list." />
+            </Grid>
             <ProgressBar x:Name="OverallProgress" Maximum="1" Visibility="Collapsed" />
         </StackPanel>
 

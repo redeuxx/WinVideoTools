@@ -540,9 +540,14 @@ public static partial class PresetConverter
         IProgress<double>? progress, Action<string>? onCommand, CancellationToken ct)
     {
         var src = await ProbeAsync(ffmpegPath, input, ct).ConfigureAwait(false);
-        var (args, notes) = BuildArgs(preset, src, input, output);
+        // ffmpeg writes under a temporary name (BuildArgs passes -f, so the extension does not matter) that becomes
+        // the output only once it is verified complete. If the app dies mid-run, the leftover is plainly unfinished.
+        var partial = output + ".partial";
+        var (args, notes) = BuildArgs(preset, src, input, partial);
         onCommand?.Invoke(string.Join(' ', args.Select(x => x.Contains(' ') ? $"\"{x}\"" : x)));
         if (File.Exists(output)) throw new IOException($"{output} already exists.");
+        // Only this method makes that name, so one already there is left over from a run that never finished.
+        TryDelete(partial);
 
         var log = new List<string>(notes);
         var started = Stopwatch.StartNew();
@@ -576,25 +581,25 @@ public static partial class PresetConverter
             ct.ThrowIfCancellationRequested();
 
             var text = string.Join(Environment.NewLine, log);
-            if (proc.ExitCode != 0 || !File.Exists(output))
+            if (proc.ExitCode != 0 || !File.Exists(partial))
             {
                 var last = log.LastOrDefault(l => l.Contains("[error]") || l.Contains("[fatal]")) ?? $"ffmpeg exited with code {proc.ExitCode}";
                 return new ConvertResult(false, last, text, notes);
             }
 
             // A truncated output is also a small one; never let it pass as done (and so replace the original).
-            var outDuration = (await ProbeAsync(ffmpegPath, output, ct).ConfigureAwait(false)).Duration;
+            var outDuration = (await ProbeAsync(ffmpegPath, partial, ct).ConfigureAwait(false)).Duration;
             if (src.Duration > 0 && outDuration < src.Duration - Math.Max(1.0, src.Duration * 0.02))
                 return new ConvertResult(false, $"Output is {outDuration:0.0}s but the source is {src.Duration:0.0}s", text, notes);
 
+            File.Move(partial, output, overwrite: false);
             ok = true;
             var time = TimeSpan.FromSeconds(Math.Round(started.Elapsed.TotalSeconds));
             return new ConvertResult(true, $"converted in {time:g}", text, notes);
         }
         finally
         {
-            // ffmpeg ran with -n, so anything at the output path now is its own partial file.
-            if (!ok) TryDelete(output);
+            if (!ok) TryDelete(partial);
         }
     }
 

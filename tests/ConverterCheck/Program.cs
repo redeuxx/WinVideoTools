@@ -135,6 +135,7 @@ Check("output never overwrites source", outPath.EndsWith("-odd name ü (2).mkv")
 var r = await PresetConverter.ConvertAsync(ffmpeg, x264, P("-odd name ü.mkv"), outPath, null, null, CancellationToken.None);
 var outInfo = r.Success ? await PresetConverter.ProbeAsync(ffmpeg, outPath, CancellationToken.None) : null;
 Check("x264 conversion succeeds", r.Success, r.Summary + Environment.NewLine + r.Log);
+Check("success renames the temporary file", File.Exists(outPath) && !File.Exists(outPath + ".partial"));
 Check("output has h264 + english aac only", outInfo is not null
     && outInfo.Streams.Count(s => s.Kind == "Audio") == 1 && outInfo.Streams.Any(s => s.Kind == "Audio" && s.Codec == "aac" && s.Language == "eng")
     && outInfo.Streams.Any(s => s.Kind == "Video" && s.Codec == "h264"), string.Join(", ", outInfo?.Streams.Select(s => $"{s.Kind}:{s.Codec}:{s.Language}") ?? []));
@@ -143,7 +144,7 @@ var nvOut = P("nvenc.mkv");
 r = await PresetConverter.ConvertAsync(ffmpeg, HandBrakePreset.ReadFile(P("default.json")).Single(), P("src.mkv"), nvOut, null, null, CancellationToken.None);
 if (r.Success) Check("nvenc conversion produces hevc", (await PresetConverter.ProbeAsync(ffmpeg, nvOut, CancellationToken.None)).Streams.Any(s => s.Codec == "hevc"));
 else Console.WriteLine($"SKIP  nvenc conversion (no NVIDIA encoder here?): {r.Summary}");
-Check("failed run leaves no partial file", r.Success || !File.Exists(nvOut));
+Check("failed run leaves no partial file", r.Success || (!File.Exists(nvOut) && !File.Exists(nvOut + ".partial")));
 
 using (var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300)))
 {
@@ -153,7 +154,7 @@ using (var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300)))
     var cancelled = false;
     try { await PresetConverter.ConvertAsync(ffmpeg, slow, P("src.mkv"), P("cancel.mkv"), null, null, cts.Token); }
     catch (OperationCanceledException) { cancelled = true; }
-    Check("cancel throws and removes partial output", cancelled && !File.Exists(P("cancel.mkv")));
+    Check("cancel throws and removes partial output", cancelled && !File.Exists(P("cancel.mkv")) && !File.Exists(P("cancel.mkv.partial")));
 }
 
 Directory.Delete(dir, recursive: true);

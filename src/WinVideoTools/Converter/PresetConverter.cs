@@ -516,6 +516,12 @@ public static partial class PresetConverter
         var k = 0;
         foreach (var t in tracks)
         {
+            // ffmpeg prints "none" for a codec it cannot identify; no container will take it, and mapping it fails the whole run.
+            if (t.Codec == "none")
+            {
+                notes.Add($"Subtitle track {t.Index} skipped: ffmpeg does not recognise its codec.");
+                continue;
+            }
             var codec = format switch
             {
                 // MKV holds every subtitle codec except MP4's own text format.

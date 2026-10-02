@@ -405,6 +405,22 @@ public sealed partial class ConverterPage : Page
         }
     }
 
+    // Copies the full path even if the original has since been moved or deleted; it is just text.
+    private void CopyPath_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not string path) return;
+        try
+        {
+            var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(Path.GetFullPath(path));
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+        }
+        catch (Exception ex)
+        {
+            ShowInfo(InfoBarSeverity.Error, $"Could not copy the path for {path}: {ex.Message}");
+        }
+    }
+
     // CONVERT
 
     private async void Convert_Click(object sender, RoutedEventArgs e)

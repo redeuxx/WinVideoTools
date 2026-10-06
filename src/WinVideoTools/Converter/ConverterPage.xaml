@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:WinVideoTools.Converter"
+    xmlns:app="using:WinVideoTools"
     NavigationCacheMode="Required">
     <Grid Padding="24" RowSpacing="12">
         <Grid.RowDefinitions>
@@ -19,7 +20,7 @@
 
         <TextBlock Text="Convert" Style="{StaticResource TitleTextBlockStyle}" />
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+        <app:WrapPanel Grid.Row="1">
             <ComboBox x:Name="PresetBox" Header="HandBrake preset" PlaceholderText="Import a preset to start" Width="360"
                       SelectionChanged="PresetBox_SelectionChanged" />
             <Button x:Name="ImportButton" Content="Import..." Click="Import_Click" VerticalAlignment="Bottom"
@@ -27,7 +28,7 @@
             <Button x:Name="ExportButton" Content="Export..." Click="Export_Click" IsEnabled="False" VerticalAlignment="Bottom"
                     ToolTipService.ToolTip="Save the selected preset as a file HandBrake can import" />
             <Button x:Name="DeletePresetButton" Content="Delete" Click="DeletePreset_Click" IsEnabled="False" VerticalAlignment="Bottom" />
-        </StackPanel>
+        </app:WrapPanel>
 
         <TextBlock x:Name="PresetNotes" Grid.Row="2" TextWrapping="Wrap" Visibility="Collapsed"
                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -67,50 +68,58 @@
             </StackPanel>
         </ContentDialog>
 
-        <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="8">
-            <Button x:Name="AddFilesButton" Content="Add files..." Click="AddFiles_Click" />
-            <Button x:Name="AddFolderButton" Content="Add folder..." Click="AddFolder_Click"
-                    ToolTipService.ToolTip="Adds every video in the folder and its subfolders" />
-            <Button x:Name="RescanButton" Content="Rescan folders" Click="Rescan_Click" IsEnabled="False"
-                    ToolTipService.ToolTip="Look in the folders already added for videos that are not in the list yet, and queue them" />
-            <Button x:Name="RemoveButton" Content="Remove selected" Click="Remove_Click" IsEnabled="False" />
-            <Button x:Name="ClearButton" Content="Clear list" Click="Clear_Click" IsEnabled="False" />
-            <DropDownButton x:Name="SessionButton" Content="Session"
-                            ToolTipService.ToolTip="Save the list and each file's result to pick up later">
-                <DropDownButton.Flyout>
-                    <MenuFlyout Placement="Bottom">
-                        <MenuFlyoutItem x:Name="SaveSessionItem" Text="Save session..." Click="SaveSession_Click" IsEnabled="False">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE74E;" />
-                            </MenuFlyoutItem.Icon>
-                        </MenuFlyoutItem>
-                        <MenuFlyoutItem x:Name="LoadSessionItem" Text="Load session..." Click="LoadSession_Click">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE8E5;" />
-                            </MenuFlyoutItem.Icon>
-                        </MenuFlyoutItem>
-                        <MenuFlyoutSeparator />
-                        <ToggleMenuFlyoutItem x:Name="AutosaveItem" Text="Autosave" Click="Autosave_Click"
-                                              ToolTipService.ToolTip="Keep the saved session file up to date as files are added and converted, and reopen it when the app starts" />
-                    </MenuFlyout>
-                </DropDownButton.Flyout>
-            </DropDownButton>
-            <Button x:Name="OptionsButton" Click="Options_Click" AutomationProperties.Name="Options"
-                    ToolTipService.ToolTip="Skip HEVC files and delete options">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon Glyph="&#xE713;" FontSize="14" />
-                    <TextBlock Text="Options..." />
-                </StackPanel>
-            </Button>
-            <Button x:Name="ConvertButton" Content="Convert" Style="{StaticResource AccentButtonStyle}" Click="Convert_Click" IsEnabled="False" />
-            <Button x:Name="PauseButton" Content="Pause" Click="Pause_Click" IsEnabled="False"
-                    ToolTipService.ToolTip="Let the current file finish, then hold the rest of the queue until you resume" />
-            <CheckBox x:Name="AutoScrollBox" Content="Auto-scroll" Margin="8,0,0,0" VerticalAlignment="Center"
-                      Checked="Setting_Changed" Unchecked="Setting_Changed"
-                      ToolTipService.ToolTip="Scroll the list to each file as it starts converting" />
-            <CheckBox x:Name="ShutdownBox" Content="Shut down when finished" VerticalAlignment="Center"
-                      ToolTipService.ToolTip="After the whole queue finishes, shut down Windows following a 60-second countdown you can cancel. Not remembered between sessions." />
-        </StackPanel>
+        <!-- Groups wrap as units so related controls stay together when the window is narrow.
+             Convert and Pause have a MinWidth so swapping to Cancel or Resume does not move them to another line. -->
+        <app:WrapPanel Grid.Row="4" HorizontalSpacing="16">
+            <app:WrapPanel>
+                <Button x:Name="AddFilesButton" Content="Add files..." Click="AddFiles_Click" />
+                <Button x:Name="AddFolderButton" Content="Add folder..." Click="AddFolder_Click"
+                        ToolTipService.ToolTip="Adds every video in the folder and its subfolders" />
+                <Button x:Name="RescanButton" Content="Rescan folders" Click="Rescan_Click" IsEnabled="False"
+                        ToolTipService.ToolTip="Look in the folders already added for videos that are not in the list yet, and queue them" />
+                <Button x:Name="RemoveButton" Content="Remove selected" Click="Remove_Click" IsEnabled="False" />
+                <Button x:Name="ClearButton" Content="Clear list" Click="Clear_Click" IsEnabled="False" />
+            </app:WrapPanel>
+            <app:WrapPanel>
+                <DropDownButton x:Name="SessionButton" Content="Session"
+                                ToolTipService.ToolTip="Save the list and each file's result to pick up later">
+                    <DropDownButton.Flyout>
+                        <MenuFlyout Placement="Bottom">
+                            <MenuFlyoutItem x:Name="SaveSessionItem" Text="Save session..." Click="SaveSession_Click" IsEnabled="False">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE74E;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Name="LoadSessionItem" Text="Load session..." Click="LoadSession_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8E5;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutSeparator />
+                            <ToggleMenuFlyoutItem x:Name="AutosaveItem" Text="Autosave" Click="Autosave_Click"
+                                                  ToolTipService.ToolTip="Keep the saved session file up to date as files are added and converted, and reopen it when the app starts" />
+                        </MenuFlyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+                <Button x:Name="OptionsButton" Click="Options_Click" AutomationProperties.Name="Options"
+                        ToolTipService.ToolTip="Skip HEVC files and delete options">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE713;" FontSize="14" />
+                        <TextBlock Text="Options..." />
+                    </StackPanel>
+                </Button>
+            </app:WrapPanel>
+            <app:WrapPanel>
+                <Button x:Name="ConvertButton" Content="Convert" MinWidth="80" Style="{StaticResource AccentButtonStyle}" Click="Convert_Click" IsEnabled="False" />
+                <Button x:Name="PauseButton" Content="Pause" MinWidth="80" Click="Pause_Click" IsEnabled="False"
+                        ToolTipService.ToolTip="Let the current file finish, then hold the rest of the queue until you resume" />
+                <CheckBox x:Name="AutoScrollBox" Content="Auto-scroll" VerticalAlignment="Center"
+                          Checked="Setting_Changed" Unchecked="Setting_Changed"
+                          ToolTipService.ToolTip="Scroll the list to each file as it starts converting" />
+                <CheckBox x:Name="ShutdownBox" Content="Shut down when finished" VerticalAlignment="Center"
+                          ToolTipService.ToolTip="After the whole queue finishes, shut down Windows following a 60-second countdown you can cancel. Not remembered between sessions." />
+            </app:WrapPanel>
+        </app:WrapPanel>
 
         <StackPanel Grid.Row="5" Spacing="4">
             <InfoBar x:Name="Info" IsOpen="False" />

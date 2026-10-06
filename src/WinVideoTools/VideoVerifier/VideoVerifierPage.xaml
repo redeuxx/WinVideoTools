@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:WinVideoTools.VideoVerifier"
+    xmlns:app="using:WinVideoTools"
     NavigationCacheMode="Required">
     <Grid Padding="24" RowSpacing="12">
         <Grid.RowDefinitions>
@@ -27,7 +28,7 @@
             <Button x:Name="BrowseButton" Grid.Column="1" Content="Browse..." Click="Browse_Click" />
         </Grid>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="16">
+        <app:WrapPanel Grid.Row="2" HorizontalSpacing="16">
             <CheckBox x:Name="RecurseBox" Content="Include subfolders" IsChecked="True" VerticalAlignment="Center" />
             <NumberBox x:Name="ParallelBox" Header="Files at once" Minimum="1" Maximum="32" SpinButtonPlacementMode="Inline" Width="160" />
             <Button x:Name="ScanButton" Content="Scan" Style="{StaticResource AccentButtonStyle}" Click="Scan_Click" VerticalAlignment="Bottom" />
@@ -44,7 +45,7 @@
             <Button x:Name="ExportButton" Content="Export CSV..." Click="Export_Click" IsEnabled="False" VerticalAlignment="Bottom" />
             <Button x:Name="ClearListButton" Content="Clear list" Click="ClearList_Click" IsEnabled="False" VerticalAlignment="Bottom"
                     ToolTipService.ToolTip="Remove all results from the list (files are not touched)" />
-        </StackPanel>
+        </app:WrapPanel>
 
         <StackPanel Grid.Row="3" Spacing="4">
             <InfoBar x:Name="Info" IsOpen="False" />
@@ -88,25 +89,22 @@
             </ListView.ItemTemplate>
         </ListView>
 
-        <Grid Grid.Row="5" ColumnSpacing="8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <Button x:Name="SelectValidButton" Content="Select valid" Click="SelectValid_Click" IsEnabled="False" />
-            <Button x:Name="SelectInvalidButton" Grid.Column="1" Content="Select invalid" Click="SelectInvalid_Click" IsEnabled="False"
-                    ToolTipService.ToolTip="Selects files that failed verification or could not be checked" />
-            <Button x:Name="ClearButton" Grid.Column="2" Content="Clear selection" Click="Clear_Click" IsEnabled="False" />
-            <TextBlock x:Name="SelectionText" Grid.Column="3" VerticalAlignment="Center" Margin="8,0" />
-            <Button x:Name="RecycleButton" Grid.Column="4" Content="Move to Recycle Bin" Click="Recycle_Click" IsEnabled="False" />
-            <Button x:Name="MoveButton" Grid.Column="5" Content="Move to folder..." Click="Move_Click" IsEnabled="False" />
-            <Button x:Name="DeleteButton" Grid.Column="6" Content="Delete permanently" Click="Delete_Click" IsEnabled="False" />
-        </Grid>
+        <!-- Groups wrap as units so selection and file actions stay together when the window is narrow.
+             SelectionText has a MinWidth so a changing count does not move the file actions to another line. -->
+        <app:WrapPanel Grid.Row="5" HorizontalSpacing="16">
+            <app:WrapPanel>
+                <Button x:Name="SelectValidButton" Content="Select valid" Click="SelectValid_Click" IsEnabled="False" />
+                <Button x:Name="SelectInvalidButton" Content="Select invalid" Click="SelectInvalid_Click" IsEnabled="False"
+                        ToolTipService.ToolTip="Selects files that failed verification or could not be checked" />
+                <Button x:Name="ClearButton" Content="Clear selection" Click="Clear_Click" IsEnabled="False" />
+                <TextBlock x:Name="SelectionText" VerticalAlignment="Center" Margin="8,0,0,0" MinWidth="100" />
+            </app:WrapPanel>
+            <app:WrapPanel>
+                <Button x:Name="RecycleButton" Content="Move to Recycle Bin" Click="Recycle_Click" IsEnabled="False" />
+                <Button x:Name="MoveButton" Content="Move to folder..." Click="Move_Click" IsEnabled="False" />
+                <Button x:Name="DeleteButton" Content="Delete permanently" Click="Delete_Click" IsEnabled="False" />
+            </app:WrapPanel>
+        </app:WrapPanel>
 
         <TextBox x:Name="DetailsBox" Grid.Row="6" Header="Details for selected file" IsReadOnly="True" TextWrapping="Wrap"
                  AcceptsReturn="True" Height="140" FontFamily="Consolas" ScrollViewer.VerticalScrollBarVisibility="Auto" />

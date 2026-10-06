@@ -26,7 +26,8 @@
             IsTitleBarAutoPaddingEnabled="False"
             IsSettingsVisible="False"
             IsBackButtonVisible="Collapsed"
-            PaneDisplayMode="Left"
+            PaneDisplayMode="Auto"
+            CompactModeThresholdWidth="0"
             SelectionChanged="Nav_SelectionChanged">
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="Video Verifier" Tag="VideoVerifier" Icon="Video" />

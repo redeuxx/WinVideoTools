@@ -69,8 +69,30 @@
             <Button x:Name="AddFilesButton" Content="Add files..." Click="AddFiles_Click" />
             <Button x:Name="AddFolderButton" Content="Add folder..." Click="AddFolder_Click"
                     ToolTipService.ToolTip="Adds every video in the folder and its subfolders" />
+            <Button x:Name="RescanButton" Content="Rescan folders" Click="Rescan_Click" IsEnabled="False"
+                    ToolTipService.ToolTip="Look in the folders already added for videos that are not in the list yet, and queue them" />
             <Button x:Name="RemoveButton" Content="Remove selected" Click="Remove_Click" IsEnabled="False" />
             <Button x:Name="ClearButton" Content="Clear list" Click="Clear_Click" IsEnabled="False" />
+            <DropDownButton x:Name="SessionButton" Content="Session"
+                            ToolTipService.ToolTip="Save the list and each file's result to pick up later">
+                <DropDownButton.Flyout>
+                    <MenuFlyout Placement="Bottom">
+                        <MenuFlyoutItem x:Name="SaveSessionItem" Text="Save session..." Click="SaveSession_Click" IsEnabled="False">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE74E;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem x:Name="LoadSessionItem" Text="Load session..." Click="LoadSession_Click">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE8E5;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutSeparator />
+                        <ToggleMenuFlyoutItem x:Name="AutosaveItem" Text="Autosave" Click="Autosave_Click"
+                                              ToolTipService.ToolTip="Keep the saved session file up to date as files are added and converted, and reopen it when the app starts" />
+                    </MenuFlyout>
+                </DropDownButton.Flyout>
+            </DropDownButton>
             <Button x:Name="OptionsButton" Click="Options_Click" AutomationProperties.Name="Options"
                     ToolTipService.ToolTip="Skip HEVC files and delete options">
                 <StackPanel Orientation="Horizontal" Spacing="8">

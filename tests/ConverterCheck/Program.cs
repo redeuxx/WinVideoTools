@@ -72,6 +72,23 @@ Check("folders are flattened", string.Join(",", HandBrakePreset.ReadFile(P("fold
 File.WriteAllText(P("bad.json"), "{ \"nope\": 1 }");
 Check("non-preset JSON is rejected", Throws<InvalidDataException>(() => HandBrakePreset.ReadFile(P("bad.json"))));
 
+// SESSION
+
+File.WriteAllText(P("out.mkv"), "");
+new ConvertSession([dir, "relative"], [
+    new SessionItem(P("a.mkv"), 10, ConvertStatus.Done, "ok", "Kept both", "log", P("out.mkv"), 5, 0.5, false),
+    new SessionItem(P("b.mkv"), 20, ConvertStatus.Converting, "", "", "", P("gone.mkv"), null, null, false),
+    new SessionItem(P("A.MKV"), 30, ConvertStatus.Queued, "", "", "", null, null, null, false),
+    new SessionItem("rel.mkv", 1, ConvertStatus.Queued, "", "", "", null, null, null, false),
+    new SessionItem(P("evil.exe"), 1, ConvertStatus.Queued, "", "", "", P("out.exe"), null, null, false),
+]).Write(P("session.json"));
+var session = ConvertSession.Read(P("session.json"));
+Check("session keeps absolute videos once", session.Items.Count == 2 && session.Folders.SequenceEqual([dir]), string.Join(", ", session.Items.Select(i => i.Path)));
+Check("session round-trips results", session.Items[0] is { Status: ConvertStatus.Done, Decision: "Kept both", OutputSize: 5, SizeRatio: 0.5 } && session.Items[0].OutputPath == P("out.mkv"));
+Check("interrupted file is queued, missing output forgotten", session.Items[1] is { Status: ConvertStatus.Queued, OutputPath: null });
+Check("session write leaves no temp file", !File.Exists(P("session.json.tmp")));
+Check("non-session JSON is rejected", Throws<InvalidDataException>(() => ConvertSession.Read(P("bad.json"))));
+
 // MAPPING
 
 var (clean, dropped) = PresetConverter.SanitizeEncoderOptions(@"ref=4:dump-yuv=out.yuv:csv=C\x.csv:aq-mode=3:qpfile=q.txt");

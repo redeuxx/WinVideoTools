@@ -5,8 +5,6 @@ using Microsoft.UI.Xaml.Media;
 
 namespace WinVideoTools.Converter;
 
-public enum ConvertStatus { Queued, Converting, Done, Failed, Cancelled, Skipped }
-
 public sealed class ConvertItem(string path, long inputSize) : INotifyPropertyChanged
 {
     public string Path { get; } = path;

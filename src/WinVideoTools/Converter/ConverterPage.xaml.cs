@@ -25,9 +25,9 @@ public sealed partial class ConverterPage : Page
     private bool _settingsLoaded;
 
     // SameFolder is null in files saved before the checkbox existed, when an empty folder meant "next to source".
-    // "Delete original" is deliberately not remembered: deleting sources should be chosen each session.
+    // "Shut down when finished" is deliberately not remembered. "Delete original" is, but Convert confirms it every run.
     private sealed record Settings(string OutputFolder, bool? SameFolder, bool DeleteLarger = false, bool SkipHevc = false, bool SkipHevcUpTo1080p = false, bool AutoScroll = true,
-        bool Autosave = false, string? SessionPath = null);
+        bool Autosave = false, string? SessionPath = null, string? Preset = null, bool DeleteOriginal = false);
     private CancellationTokenSource? _cts;
     // Folders files were added from, for Rescan; saved with the session.
     private readonly List<string> _folders = [];
@@ -36,10 +36,17 @@ public sealed partial class ConverterPage : Page
     private static readonly string RecoveryPath = Path.Combine(Path.GetDirectoryName(SettingsPath)!, "converter-recovery.json");
     // The session file last saved or loaded; Autosave keeps it current.
     private string? _sessionPath;
-    // Changes come in bursts (a status flip, then its result fields), so saving waits for a quiet moment.
+    // Changes come in bursts (a status flip, then its result fields), so saving waits a moment to batch them,
+    // counted from the first change so a steady stream of changes cannot put it off.
     private readonly DispatcherTimer _autosave = new() { Interval = TimeSpan.FromSeconds(2) };
     // Writes run one after another so two never share the temporary file.
     private Task _saving = Task.CompletedTask;
+    // Saving waits until startup has looked for a list to restore, so an empty startup list never replaces the recovery file first.
+    private bool _restored;
+    // True once the list or options changed since the session file was written or loaded; Autosave only rewrites it then.
+    private bool _sessionFileDirty;
+    // Whether the last write failed; a clean close then keeps the recovery file. Set on the save task's thread.
+    private volatile bool _lastSaveFailed;
     // True while a folder is being listed; the queue is locked until its files are in.
     private bool _adding;
     // True while AddPaths fills _items, so the list syncs once at the end rather than once per file.
@@ -78,14 +85,10 @@ public sealed partial class ConverterPage : Page
             await SaveSessionNowAsync();
         };
         App.MainWindow!.AppWindow.Closing += (_, _) => OnAppClosing();
-        LoadPresets(null);
         var settings = LoadSettings();
-        OutputBox.Text = settings.OutputFolder;
-        SameFolderBox.IsChecked = settings.SameFolder ?? settings.OutputFolder.Length == 0;
-        DeleteLargerBox.IsChecked = settings.DeleteLarger;
-        SkipHevcBox.IsChecked = settings.SkipHevc;
-        SkipHevc1080Box.IsChecked = settings.SkipHevcUpTo1080p;
-        AutoScrollBox.IsChecked = settings.AutoScroll;
+        LoadPresets(settings.Preset);
+        ApplyOptions(new ConvertOptions(null, settings.OutputFolder, settings.SameFolder ?? settings.OutputFolder.Length == 0,
+            settings.SkipHevc, settings.SkipHevcUpTo1080p, settings.DeleteLarger, settings.DeleteOriginal, settings.AutoScroll));
         AutosaveItem.IsChecked = settings.Autosave;
         _settingsLoaded = true;
         FileDrop.Attach(this, "Add to queue", () => _cts is null && !_adding, OnDropAsync);
@@ -171,8 +174,9 @@ public sealed partial class ConverterPage : Page
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-            File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new Settings(OutputBox.Text.Trim(), SameFolderBox.IsChecked == true, DeleteLargerBox.IsChecked == true, SkipHevcBox.IsChecked == true, SkipHevc1080Box.IsChecked == true, AutoScrollBox.IsChecked == true,
-                AutosaveItem.IsChecked, _sessionPath)));
+            var o = CurrentOptions();
+            File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new Settings(o.OutputFolder ?? "", o.SameFolder, o.DeleteLarger, o.SkipHevc, o.SkipHevcUpTo1080p, o.AutoScroll,
+                AutosaveItem.IsChecked, _sessionPath, o.Preset, o.DeleteOriginal)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -187,6 +191,48 @@ public sealed partial class ConverterPage : Page
         if (SameFolderBox.IsChecked == true) OutputBox.Text = "";
         SetBusy(_cts is not null);
         SaveSettings();
+        SessionChanged();
+    }
+
+    // The folder last set or seen in the box. TextChanged arrives after the code that set the text has finished,
+    // so this tells a typed change from one ApplyOptions made.
+    private string _outputText = "";
+
+    // A typed folder reaches settings when Convert is pressed; the session picks it up on its next save.
+    private void OutputBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (OutputBox.Text == _outputText) return;
+        _outputText = OutputBox.Text;
+        SessionChanged();
+    }
+
+    private ConvertOptions CurrentOptions() => new(Preset?.Name, OutputBox.Text.Trim(), SameFolderBox.IsChecked == true,
+        SkipHevcBox.IsChecked == true, SkipHevc1080Box.IsChecked == true, DeleteLargerBox.IsChecked == true,
+        DeleteOriginalBox.IsChecked == true, AutoScrollBox.IsChecked == true);
+
+    /// <summary>Sets every option, and the preset when one is named.</summary>
+    /// <returns>A warning when the named preset is not saved here; the current preset then stays.</returns>
+    private string? ApplyOptions(ConvertOptions o)
+    {
+        // Same-folder first: checking it clears the folder box, so the folder is filled in after.
+        SameFolderBox.IsChecked = o.SameFolder;
+        OutputBox.Text = _outputText = o.SameFolder ? "" : o.OutputFolder ?? "";
+        SkipHevcBox.IsChecked = o.SkipHevc;
+        SkipHevc1080Box.IsChecked = o.SkipHevcUpTo1080p;
+        DeleteLargerBox.IsChecked = o.DeleteLarger;
+        DeleteOriginalBox.IsChecked = o.DeleteOriginal;
+        AutoScrollBox.IsChecked = o.AutoScroll;
+        string? warning = null;
+        if (o.Preset is { } name)
+        {
+            if ((PresetBox.ItemsSource as IEnumerable<HandBrakePreset>)?.FirstOrDefault(p => p.Name == name) is { } preset)
+                PresetBox.SelectedItem = preset;
+            else
+                warning = $"The preset \"{name}\" is not saved here, so \"{Preset?.Name ?? "none"}\" stays selected.";
+        }
+        SetBusy(_cts is not null);
+        SaveSettings();
+        return warning;
     }
 
     // PRESETS
@@ -207,6 +253,8 @@ public sealed partial class ConverterPage : Page
         PresetNotes.Text = notes.Count == 0 ? "" : "Not applied from this preset:" + Environment.NewLine + string.Join(Environment.NewLine, notes.Select(n => "  • " + n));
         PresetNotes.Visibility = notes.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         SetBusy(_cts is not null);
+        SaveSettings();
+        SessionChanged();
     }
 
     private async void Import_Click(object sender, RoutedEventArgs e)
@@ -390,9 +438,14 @@ public sealed partial class ConverterPage : Page
         _folders.Clear();
         // Detach before the debounced save runs, so Autosave never overwrites a saved session with an empty list.
         _sessionPath = null;
+        // Autosave needs a file; saving the new list as a session turns it back on.
+        var autosaveWasOn = AutosaveItem.IsChecked;
+        AutosaveItem.IsChecked = false;
         SaveSettings();
         DetailsBox.Text = "";
+        SetBusy(_cts is not null);
         UpdateSummary();
+        if (autosaveWasOn) ShowInfo(InfoBarSeverity.Informational, "Autosave is off, as the list is no longer tied to a session file. Save a session to turn it back on.");
     }
 
     // SESSION
@@ -424,8 +477,11 @@ public sealed partial class ConverterPage : Page
         if (await ReadSessionAsync(file.Path) is not { } session) return;
         // A run may have started while the picker was open.
         if (_cts is not null || _adding) return;
-        ApplySession(session, file.Path);
-        ShowInfo(InfoBarSeverity.Success, $"Loaded {session.Items.Count} files. Rescan folders to queue videos added since.");
+        var warning = ApplySession(session, file.Path);
+        // A session can come from elsewhere; say where conversions will now be written.
+        var output = session.Options is { SameFolder: false, OutputFolder: { Length: > 0 } f } ? $" Output folder: {f}." : "";
+        ShowInfo(warning is null ? InfoBarSeverity.Success : InfoBarSeverity.Warning,
+            $"Loaded {session.Items.Count} files.{output} Rescan folders to queue videos added since.{(warning is null ? "" : " " + warning)}");
     }
 
     private async void Autosave_Click(object sender, RoutedEventArgs e)
@@ -442,16 +498,55 @@ public sealed partial class ConverterPage : Page
     /// </summary>
     private async void RestoreOnStartup(Settings settings)
     {
-        var recovering = File.Exists(RecoveryPath);
-        var path = recovering ? RecoveryPath
-            : settings.Autosave && settings.SessionPath is { } p && File.Exists(p) ? p : null;
-        if (path is null || await ReadSessionAsync(path) is not { } session) return;
-        // Something may have been added while the file was read; never replace it.
-        if (_items.Count > 0 || _cts is not null || _adding) return;
-        ApplySession(session, settings.SessionPath);
-        ShowInfo(InfoBarSeverity.Informational, recovering
-            ? $"Recovered {session.Items.Count} files from when the app last closed unexpectedly."
-            : $"Reopened {settings.SessionPath}");
+        var applied = false;
+        try
+        {
+            var recovering = File.Exists(RecoveryPath);
+            var path = recovering ? RecoveryPath : settings.Autosave ? settings.SessionPath : null;
+            if (path is null) return;
+            if (await ReadSessionAsync(path) is not { } session)
+            {
+                // Set aside rather than left for the next save to delete; the read error is already shown.
+                if (recovering) KeepUnreadableRecoveryFile();
+                return;
+            }
+            // Something may have been added while the file was read; never replace it.
+            if (_items.Count > 0 || _cts is not null || _adding) return;
+            // Settings hold the session file the list belonged to: every change to it is saved, and the finally below clears a stale one.
+            var warning = ApplySession(session, settings.SessionPath);
+            applied = true;
+            ShowInfo(warning is null ? InfoBarSeverity.Informational : InfoBarSeverity.Warning, (recovering
+                ? $"Recovered {session.Items.Count} files from when the app last closed unexpectedly."
+                : $"Reopened {settings.SessionPath}") + (warning is null ? "" : " " + warning));
+        }
+        finally
+        {
+            // Autosave never stays on without a file to write to.
+            if (AutosaveItem.IsChecked && _sessionPath is null)
+            {
+                AutosaveItem.IsChecked = false;
+                ShowInfo(InfoBarSeverity.Warning, $"Autosave is off: could not reopen {settings.SessionPath}. Load or save a session to turn it back on.");
+            }
+            // Brings the remembered session file in line with _sessionPath, so a later crash recovery attaches the right one.
+            SaveSettings();
+            // Anything changed while the file was read is saved now.
+            _restored = true;
+            SessionChanged();
+            // A list just restored matches its session file; only real changes rewrite it.
+            if (applied) _sessionFileDirty = false;
+        }
+    }
+
+    private static void KeepUnreadableRecoveryFile()
+    {
+        try
+        {
+            File.Move(RecoveryPath, RecoveryPath + ".bad", overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Then the next save replaces it.
+        }
     }
 
     private async Task<ConvertSession?> ReadSessionAsync(string path)
@@ -467,7 +562,8 @@ public sealed partial class ConverterPage : Page
         }
     }
 
-    private void ApplySession(ConvertSession session, string? sessionPath)
+    /// <returns>A warning when the session's preset is not saved here.</returns>
+    private string? ApplySession(ConvertSession session, string? sessionPath)
     {
         _bulkAdding = true;
         try
@@ -493,18 +589,24 @@ public sealed partial class ConverterPage : Page
         _folders.Clear();
         _folders.AddRange(session.Folders);
         _sessionPath = sessionPath;
+        // Older sessions have no options; the current ones then stay.
+        var warning = session.Options is { } o ? ApplyOptions(o) : null;
         SaveSettings();
         DetailsBox.Text = "";
         SyncView();
         SetBusy(false);
         UpdateSummary();
+        // The recovery file follows the new list, but the session file it came from is only rewritten once something changes.
         SessionChanged();
+        _sessionFileDirty = false;
+        return warning;
     }
 
     private void SessionChanged()
     {
-        _autosave.Stop();
-        _autosave.Start();
+        if (!_restored) return;
+        _sessionFileDirty = true;
+        if (!_autosave.IsEnabled) _autosave.Start();
     }
 
     /// <summary>
@@ -515,15 +617,26 @@ public sealed partial class ConverterPage : Page
     private async Task<bool> SaveSessionNowAsync(bool always = false)
     {
         var session = new ConvertSession([.. _folders], _items.Select(i => new SessionItem(i.Path, i.InputSize, i.Status, i.Summary,
-            i.Decision, i.Details, i.OutputPath, i.OutputSize, i.SizeRatio, i.OriginalDeleted)).ToList());
-        var target = always || AutosaveItem.IsChecked ? _sessionPath : null;
+            i.Decision, i.Details, i.OutputPath, i.OutputSize, i.SizeRatio, i.OriginalDeleted)).ToList(), CurrentOptions());
+        var target = always || (AutosaveItem.IsChecked && _sessionFileDirty) ? _sessionPath : null;
+        if (target is not null) _sessionFileDirty = false;
         var previous = _saving;
         var saving = Task.Run(async () =>
         {
             await previous;
-            if (session.Items.Count == 0) File.Delete(RecoveryPath);
-            else session.Write(RecoveryPath);
-            if (target is not null) session.Write(target);
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(RecoveryPath)!);
+                if (session.Items.Count == 0) File.Delete(RecoveryPath);
+                else session.Write(RecoveryPath);
+                if (target is not null) session.Write(target);
+                _lastSaveFailed = false;
+            }
+            catch
+            {
+                _lastSaveFailed = true;
+                throw;
+            }
         });
         // Later writes wait for this one but must not fail because it did.
         _saving = saving.ContinueWith(_ => { }, TaskScheduler.Default);
@@ -534,21 +647,22 @@ public sealed partial class ConverterPage : Page
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            if (target is not null) _sessionFileDirty = true;
             ShowInfo(InfoBarSeverity.Error, $"Could not save the session: {ex.Message}");
             return false;
         }
     }
 
-    // A clean close needs no recovery. Any queued autosave runs first, and the window waits for it, so the session file is current.
+    // A clean close needs no recovery. Any pending autosave runs first, and the window waits for it, so the session file is current.
+    // If that save failed or is still running, the recovery file stays and the list comes back next start.
     private void OnAppClosing()
     {
         _autosave.Stop();
         // Waits on _saving, not the async method: its continuation needs this (blocked) UI thread. It sets _saving before yielding.
-        if (AutosaveItem.IsChecked && _sessionPath is not null) _ = SaveSessionNowAsync();
+        if (AutosaveItem.IsChecked && _sessionFileDirty && _sessionPath is not null) _ = SaveSessionNowAsync();
         try
         {
-            _saving.Wait(TimeSpan.FromSeconds(5));
-            File.Delete(RecoveryPath);
+            if (_saving.Wait(TimeSpan.FromSeconds(5)) && !_lastSaveFailed) File.Delete(RecoveryPath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or AggregateException)
         {
@@ -703,7 +817,8 @@ public sealed partial class ConverterPage : Page
                 var converting = ConvertOneAsync(item, preset, ffmpeg, outFolder, deleteLarger, deleteOriginal, skipHevc, skipHevcUpTo1080p, ct);
                 UpdateSummary();
                 try { await converting; }
-                finally { UpdateSummary(); }
+                // The status flips before the result fields are filled in, so save again once the file is fully done.
+                finally { UpdateSummary(); SessionChanged(); }
                 OverallProgress.Value = (double)++done / pending.Count;
             }
             finished = true;

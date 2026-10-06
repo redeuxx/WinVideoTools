@@ -87,6 +87,19 @@ Check("session keeps absolute videos once", session.Items.Count == 2 && session.
 Check("session round-trips results", session.Items[0] is { Status: ConvertStatus.Done, Decision: "Kept both", OutputSize: 5, SizeRatio: 0.5 } && session.Items[0].OutputPath == P("out.mkv"));
 Check("interrupted file is queued, missing output forgotten", session.Items[1] is { Status: ConvertStatus.Queued, OutputPath: null });
 Check("session write leaves no temp file", !File.Exists(P("session.json.tmp")));
+Check("session without options reads as null options", session.Options is null);
+var opts = new ConvertOptions("default", dir, false, true, true, true, true, false);
+new ConvertSession([], [], opts).Write(P("opts.json"));
+Check("session options round-trip", ConvertSession.Read(P("opts.json")).Options == opts);
+new ConvertSession([], [], opts with { OutputFolder = "relative" }).Write(P("opts.json"));
+new ConvertSession([dir + "\0x"], [
+    new SessionItem(P("nul\0.mkv"), 1, ConvertStatus.Queued, "", "", "", null, null, null, false),
+    new SessionItem(P("unc.mkv"), 1, ConvertStatus.Done, "", "", "", @"\\no-such-host.invalid\share\out.mkv", null, null, false),
+], opts with { OutputFolder = "C:\\a\0b" }).Write(P("odd.json"));
+var odd = ConvertSession.Read(P("odd.json"));
+Check("NUL paths are dropped, not a crash", odd.Items.Count == 1 && odd.Folders.Count == 0 && odd.Options?.OutputFolder == "");
+Check("network output kept without probing", odd.Items[0].OutputPath == @"\\no-such-host.invalid\share\out.mkv");
+Check("relative output folder dropped", ConvertSession.Read(P("opts.json")).Options is { OutputFolder: "", Preset: "default" });
 Check("non-session JSON is rejected", Throws<InvalidDataException>(() => ConvertSession.Read(P("bad.json"))));
 
 // MAPPING

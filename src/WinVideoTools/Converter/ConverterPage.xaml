@@ -40,7 +40,8 @@
             </Grid.ColumnDefinitions>
             <CheckBox x:Name="SameFolderBox" Content="Save next to the source file" VerticalAlignment="Center"
                       Checked="Setting_Changed" Unchecked="Setting_Changed" />
-            <TextBox x:Name="OutputBox" Grid.Column="1" PlaceholderText="Output folder" AutomationProperties.Name="Output folder" />
+            <TextBox x:Name="OutputBox" Grid.Column="1" PlaceholderText="Output folder" AutomationProperties.Name="Output folder"
+                     TextChanged="OutputBox_TextChanged" />
             <Button x:Name="BrowseOutputButton" Grid.Column="2" Content="Browse..." Click="BrowseOutput_Click" />
         </Grid>
 
@@ -57,10 +58,11 @@
                 <CheckBox x:Name="DeleteLargerBox" Content="Delete output if larger than original"
                           Checked="Setting_Changed" Unchecked="Setting_Changed" />
                 <StackPanel Spacing="4">
-                    <CheckBox x:Name="DeleteOriginalBox" Content="Delete original if output is smaller" />
+                    <CheckBox x:Name="DeleteOriginalBox" Content="Delete original if output is smaller"
+                              Checked="Setting_Changed" Unchecked="Setting_Changed" />
                     <TextBlock Margin="28,0,0,0" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               Text="Permanently deletes the source after a full-length conversion that saved space. Not remembered between sessions; you confirm it each time you convert." />
+                               Text="Permanently deletes the source after a full-length conversion that saved space. You confirm it each time you convert." />
                 </StackPanel>
             </StackPanel>
         </ContentDialog>

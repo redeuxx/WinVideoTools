@@ -159,7 +159,7 @@ public sealed partial class ConverterPage : Page
         try
         {
             if (File.Exists(SettingsPath) && JsonSerializer.Deserialize<Settings>(File.ReadAllText(SettingsPath)) is { } s)
-                return s with { OutputFolder = s.OutputFolder is { Length: > 0 } f && Directory.Exists(f) ? f : "" };
+                return s with { OutputFolder = s.OutputFolder is { Length: > 0 } f && (IsNetworkPath(f) || Directory.Exists(f)) ? f : "" };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -167,6 +167,10 @@ public sealed partial class ConverterPage : Page
         }
         return new Settings("", true);
     }
+
+    // UNC and device paths are kept unchecked at startup: a loaded session can set the output folder, and probing a
+    // network path contacts that server and sends it Windows credentials before the user does anything.
+    private static bool IsNetworkPath(string path) => path.StartsWith(@"\\", StringComparison.Ordinal);
 
     private void SaveSettings()
     {
@@ -498,26 +502,29 @@ public sealed partial class ConverterPage : Page
     /// </summary>
     private async void RestoreOnStartup(Settings settings)
     {
-        var applied = false;
+        bool applied = false, recovering = File.Exists(RecoveryPath);
         try
         {
-            var recovering = File.Exists(RecoveryPath);
-            var path = recovering ? RecoveryPath : settings.Autosave ? settings.SessionPath : null;
-            if (path is null) return;
-            if (await ReadSessionAsync(path) is not { } session)
+            var session = recovering ? await ReadSessionAsync(RecoveryPath) : null;
+            var badRecovery = recovering && session is null;
+            if (badRecovery)
             {
-                // Set aside rather than left for the next save to delete; the read error is already shown.
-                if (recovering) KeepUnreadableRecoveryFile();
-                return;
+                // Set aside rather than left for the next save to delete, then fall back to the session file below.
+                KeepUnreadableRecoveryFile();
+                recovering = false;
             }
+            if (session is null && settings.Autosave && settings.SessionPath is { } reopen) session = await ReadSessionAsync(reopen);
+            if (session is null) return;
             // Something may have been added while the file was read; never replace it.
             if (_items.Count > 0 || _cts is not null || _adding) return;
             // Settings hold the session file the list belonged to: every change to it is saved, and the finally below clears a stale one.
             var warning = ApplySession(session, settings.SessionPath);
             applied = true;
-            ShowInfo(warning is null ? InfoBarSeverity.Informational : InfoBarSeverity.Warning, (recovering
+            ShowInfo(warning is null && !badRecovery ? InfoBarSeverity.Informational : InfoBarSeverity.Warning, (recovering
                 ? $"Recovered {session.Items.Count} files from when the app last closed unexpectedly."
-                : $"Reopened {settings.SessionPath}") + (warning is null ? "" : " " + warning));
+                : $"Reopened {settings.SessionPath}")
+                + (badRecovery ? $" The list from the last unexpected close could not be read and was kept as {RecoveryPath}.bad." : "")
+                + (warning is null ? "" : " " + warning));
         }
         finally
         {
@@ -525,15 +532,16 @@ public sealed partial class ConverterPage : Page
             if (AutosaveItem.IsChecked && _sessionPath is null)
             {
                 AutosaveItem.IsChecked = false;
-                ShowInfo(InfoBarSeverity.Warning, $"Autosave is off: could not reopen {settings.SessionPath}. Load or save a session to turn it back on.");
+                ShowInfo(InfoBarSeverity.Warning, $"Autosave is off: could not reopen {settings.SessionPath ?? "the session file"}. Load or save a session to turn it back on.");
             }
             // Brings the remembered session file in line with _sessionPath, so a later crash recovery attaches the right one.
             SaveSettings();
             // Anything changed while the file was read is saved now.
             _restored = true;
             SessionChanged();
-            // A list just restored matches its session file; only real changes rewrite it.
-            if (applied) _sessionFileDirty = false;
+            // A reopened session matches its file, so only real changes rewrite it. A recovered list can be newer than
+            // the file (its last save may have failed), so it stays marked changed and Autosave writes it out.
+            if (applied && !recovering) _sessionFileDirty = false;
         }
     }
 

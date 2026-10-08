@@ -44,6 +44,10 @@ public static partial class PresetConverter
         return !onlyUpTo1080p || (v.Width > 0 && v.Height > 0 && Math.Min(v.Width, v.Height) <= 1080);
     }
 
+    /// <summary>Whether a file skipped in an earlier run would be skipped again under the current options, so it needs no probe.</summary>
+    internal static bool StillSkipped(bool skippedUpTo1080p, bool skipHevc, bool onlyUpTo1080p) =>
+        skipHevc && (!onlyUpTo1080p || skippedUpTo1080p);
+
     /// <summary>Reads the stream list and duration ffmpeg prints for an input.</summary>
     internal static SourceInfo ParseInfo(string stderr)
     {

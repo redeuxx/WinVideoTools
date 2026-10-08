@@ -5,9 +5,12 @@ namespace WinVideoTools.Converter;
 
 public enum ConvertStatus { Queued, Converting, Done, Failed, Cancelled, Skipped }
 
-/// <summary>One file's place in a saved queue: its outcome so far, as the list showed it.</summary>
+/// <summary>
+/// One file's place in a saved queue: its outcome so far, as the list showed it. SkippedUpTo1080p marks a skipped
+/// HEVC file of at most 1080p, so a later run can keep the skip without probing it again.
+/// </summary>
 public sealed record SessionItem(string Path, long InputSize, ConvertStatus Status, string? Summary, string? Decision, string? Details,
-    string? OutputPath, long? OutputSize, double? SizeRatio, bool OriginalDeleted);
+    string? OutputPath, long? OutputSize, double? SizeRatio, bool OriginalDeleted, bool SkippedUpTo1080p = false);
 
 /// <summary>
 /// The preset and options a queue converts with. "Shut down when finished" is left out on purpose,

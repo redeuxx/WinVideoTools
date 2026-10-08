@@ -588,6 +588,7 @@ public sealed partial class ConverterPage : Page
                     OutputSize = i.OutputSize,
                     SizeRatio = i.SizeRatio,
                     OriginalDeleted = i.OriginalDeleted,
+                    SkippedUpTo1080p = i.SkippedUpTo1080p,
                 });
         }
         finally
@@ -625,7 +626,7 @@ public sealed partial class ConverterPage : Page
     private async Task<bool> SaveSessionNowAsync(bool always = false)
     {
         var session = new ConvertSession([.. _folders], _items.Select(i => new SessionItem(i.Path, i.InputSize, i.Status, i.Summary,
-            i.Decision, i.Details, i.OutputPath, i.OutputSize, i.SizeRatio, i.OriginalDeleted)).ToList(), CurrentOptions());
+            i.Decision, i.Details, i.OutputPath, i.OutputSize, i.SizeRatio, i.OriginalDeleted, i.SkippedUpTo1080p)).ToList(), CurrentOptions());
         var target = always || (AutosaveItem.IsChecked && _sessionFileDirty) ? _sessionPath : null;
         if (target is not null) _sessionFileDirty = false;
         var previous = _saving;
@@ -782,18 +783,24 @@ public sealed partial class ConverterPage : Page
         }
         SaveSettings();
 
-        // Finished files stay done; everything else (queued, failed, cancelled) runs again.
-        var pending = _items.Where(i => i.Status != ConvertStatus.Done).ToList();
-        if (pending.Count == 0)
-        {
-            ShowInfo(InfoBarSeverity.Informational, "Every file in the list is already converted.");
-            return;
-        }
-
         var deleteLarger = DeleteLargerBox.IsChecked == true;
         var deleteOriginal = DeleteOriginalBox.IsChecked == true;
         var skipHevc = SkipHevcBox.IsChecked == true;
         var skipHevcUpTo1080p = SkipHevc1080Box.IsChecked == true;
+
+        // Finished files stay done, and skipped ones stay skipped while the options would skip them again;
+        // everything else (queued, failed, cancelled, or a skip the options no longer allow) runs again.
+        var pending = _items.Where(i => i.Status switch
+        {
+            ConvertStatus.Done => false,
+            ConvertStatus.Skipped => !PresetConverter.StillSkipped(i.SkippedUpTo1080p, skipHevc, skipHevcUpTo1080p),
+            _ => true,
+        }).ToList();
+        if (pending.Count == 0)
+        {
+            ShowInfo(InfoBarSeverity.Informational, "Every file in the list is already converted or skipped.");
+            return;
+        }
         if (deleteOriginal && !await ConfirmAsync("Delete originals that shrink?",
                 "When a converted file is smaller than its source and the full length, the source file is permanently deleted. This cannot be undone.",
                 "Convert"))
@@ -928,6 +935,7 @@ public sealed partial class ConverterPage : Page
         item.SizeRatio = null;
         item.OutputSize = null;
         item.OutputPath = null;
+        item.SkippedUpTo1080p = false;
         var command = "";
         try
         {
@@ -935,6 +943,7 @@ public sealed partial class ConverterPage : Page
                 && PresetConverter.ShouldSkipHevc(src, skipHevcUpTo1080p))
             {
                 var v = src.Streams.First(s => s.Kind == "Video" && !s.AttachedPic);
+                item.SkippedUpTo1080p = PresetConverter.ShouldSkipHevc(src, onlyUpTo1080p: true);
                 item.Summary = "Skipped";
                 item.Decision = v.Width > 0 ? $"Original kept: already HEVC at {v.Width}x{v.Height}" : "Original kept: video is already HEVC";
                 item.Status = ConvertStatus.Skipped;

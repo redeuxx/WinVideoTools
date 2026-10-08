@@ -45,6 +45,9 @@ public sealed class ConvertItem(string path, long inputSize) : INotifyPropertyCh
     public bool OriginalDeleted { get; set { if (Set(ref field, value)) OnPropertyChanged(nameof(HasOriginal)); } }
     public bool HasOriginal => !OriginalDeleted;
 
+    /// <summary>Skipped as HEVC of at most 1080p, so the 1080p limit would skip it too.</summary>
+    public bool SkippedUpTo1080p { get; set; }
+
     public long InputSize { get; set { if (Set(ref field, value)) OnPropertyChanged(nameof(SizesText)); } } = inputSize;
 
     /// <summary>Output bytes; null until a conversion finishes.</summary>

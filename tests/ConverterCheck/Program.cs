@@ -2,6 +2,7 @@
 // and a real conversion of a generated clip.
 // Usage: dotnet run --project tests/ConverterCheck [absolute-path-to-ffmpeg.exe]  (default: ffmpeg on PATH)
 using System.Diagnostics;
+using System.Text.Json;
 using WinVideoTools.Converter;
 
 var ffmpeg = args.Length > 0 ? args[0] : "ffmpeg";
@@ -101,6 +102,10 @@ Check("NUL paths are dropped, not a crash", odd.Items.Count == 1 && odd.Folders.
 Check("network output kept without probing", odd.Items[0].OutputPath == @"\\no-such-host.invalid\share\out.mkv");
 Check("relative output folder dropped", ConvertSession.Read(P("opts.json")).Options is { OutputFolder: "", Preset: "default" });
 Check("non-session JSON is rejected", Throws<InvalidDataException>(() => ConvertSession.Read(P("bad.json"))));
+new ConvertSession([], [new SessionItem(P("s.mkv"), 1, ConvertStatus.Skipped, "Skipped", "", "", null, null, null, false, true)]).Write(P("skip.json"));
+Check("1080p skip round-trips", ConvertSession.Read(P("skip.json")).Items[0] is { Status: ConvertStatus.Skipped, SkippedUpTo1080p: true });
+File.WriteAllText(P("old.json"), $$"""{ "Folders": [], "Items": [ { "Path": {{JsonSerializer.Serialize(P("s.mkv"))}}, "Status": "Skipped" } ] }""");
+Check("older session reads as not known 1080p", ConvertSession.Read(P("old.json")).Items[0] is { Status: ConvertStatus.Skipped, SkippedUpTo1080p: false });
 
 // MAPPING
 
@@ -127,6 +132,8 @@ Check("1080p limit: skips 1080p, portrait and ultrawide", PresetConverter.Should
     && PresetConverter.ShouldSkipHevc(Hevc(1080, 1920), true) && PresetConverter.ShouldSkipHevc(Hevc(2560, 1080), true));
 Check("1080p limit: converts 4K and unknown size", !PresetConverter.ShouldSkipHevc(Hevc(3840, 2160), true) && !PresetConverter.ShouldSkipHevc(Hevc(0, 0), true));
 Check("never skips non-HEVC", !PresetConverter.ShouldSkipHevc(info, false));
+Check("skip stands under the same or broader rule", PresetConverter.StillSkipped(false, true, false) && PresetConverter.StillSkipped(true, true, true));
+Check("skip rechecked when the rule narrows or is off", !PresetConverter.StillSkipped(false, true, true) && !PresetConverter.StillSkipped(true, false, false));
 Check("parses duration and streams", info.Duration == 60.5 && info.Streams.Count == 7 && info.Streams[6].AttachedPic && info.Streams[2].Language == "eng");
 Check("picks first matching track", PresetConverter.SelectTracks(info.Streams.Where(s => s.Kind == "Audio"), "first", ["eng"]).Single().Index == 2);
 Check("B/T language codes match", PresetConverter.SelectTracks(info.Streams.Where(s => s.Kind == "Subtitle"), "first", ["deu"]).Single().Index == 4);

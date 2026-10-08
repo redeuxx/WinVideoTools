@@ -107,6 +107,66 @@ Check("1080p skip round-trips", ConvertSession.Read(P("skip.json")).Items[0] is 
 File.WriteAllText(P("old.json"), $$"""{ "Folders": [], "Items": [ { "Path": {{JsonSerializer.Serialize(P("s.mkv"))}}, "Status": "Skipped" } ] }""");
 Check("older session reads as not known 1080p", ConvertSession.Read(P("old.json")).Items[0] is { Status: ConvertStatus.Skipped, SkippedUpTo1080p: false });
 
+// HISTORY
+
+File.WriteAllText(P("h1.mkv"), "first");
+File.WriteAllText(P("h2.mkv"), "skipped");
+File.WriteAllText(P("h3.mkv"), "output");
+var stat1 = ConvertHistory.Stat(new FileInfo(P("h1.mkv")));
+var history = new ConvertHistory();
+history.Record(P("h1.mkv"), HistoryOutcome.Discarded, stat1!.Value.Size, stat1.Value.Modified);
+var stat2 = ConvertHistory.Stat(new FileInfo(P("h2.mkv")))!.Value;
+history.Record(P("h2.mkv"), HistoryOutcome.Skipped, stat2.Size, stat2.Modified);
+var stat3 = ConvertHistory.Stat(new FileInfo(P("h3.mkv")))!.Value;
+history.Record(P("h3.mkv"), HistoryOutcome.Output, stat3.Size, stat3.Modified);
+history.AddFolder(dir);
+history.AddFolder(dir.ToUpperInvariant());
+Check("discarded file is left out", history.IsProcessed(P("h1.mkv"), stat1, false, false));
+Check("lookup ignores case", history.IsProcessed(P("H1.MKV"), stat1, false, false));
+Check("written output is left out", history.IsProcessed(P("h3.mkv"), stat3, false, false));
+Check("unknown file is queued", !history.IsProcessed(P("new.mkv"), stat1, false, false) && !history.Changed(P("new.mkv"), stat1));
+Check("missing file is neither processed nor changed", !history.IsProcessed(P("h1.mkv"), null, false, false) && !history.Changed(P("h1.mkv"), null));
+Check("skip counts only while the options would skip again", history.IsProcessed(P("h2.mkv"), stat2, true, false)
+    && !history.IsProcessed(P("h2.mkv"), stat2, false, false) && !history.IsProcessed(P("h2.mkv"), stat2, true, true));
+Check("folders kept once", history.Folders.Count == 1);
+
+ConvertHistory.WriteJson(P("history.json"), history.ToJson());
+var reread = ConvertHistory.Read(P("history.json"));
+Check("history round-trips with exact times", reread.Count == 3 && reread.IsProcessed(P("h1.mkv"), ConvertHistory.Stat(new FileInfo(P("h1.mkv"))), false, false)
+    && reread.Find(P("h2.mkv"))?.Outcome == HistoryOutcome.Skipped && reread.Folders.SequenceEqual([dir]));
+Check("history write leaves no temp file", !File.Exists(P("history.json.tmp")));
+
+File.AppendAllText(P("h1.mkv"), " and changed");
+var changed = ConvertHistory.Stat(new FileInfo(P("h1.mkv")));
+Check("changed size is queued again", !reread.IsProcessed(P("h1.mkv"), changed, false, false) && reread.Changed(P("h1.mkv"), changed));
+File.SetLastWriteTimeUtc(P("h2.mkv"), DateTime.UtcNow.AddDays(1));
+var touched = ConvertHistory.Stat(new FileInfo(P("h2.mkv")));
+Check("changed time is queued again", !reread.IsProcessed(P("h2.mkv"), touched, true, false) && reread.Changed(P("h2.mkv"), touched));
+
+var other = new ConvertHistory();
+other.Record(P("h1.mkv"), HistoryOutcome.Converted, changed!.Value.Size, changed.Value.Modified);
+other.AddFolder(P("more"));
+reread.Merge(other);
+Check("import adds folders and its entries win", reread.Find(P("h1.mkv"))?.Outcome == HistoryOutcome.Converted
+    && reread.IsProcessed(P("h1.mkv"), changed, false, false) && reread.Folders.Count == 2 && reread.Count == 3);
+
+File.WriteAllText(P("odd-history.json"), $$"""
+{ "Folders": ["relative", {{JsonSerializer.Serialize(dir + "\0x")}}, {{JsonSerializer.Serialize(dir)}}],
+  "Files": {
+    "rel.mkv": { "Outcome": "Converted", "Size": 1, "Modified": "2026-01-01T00:00:00Z" },
+    {{JsonSerializer.Serialize(P("evil.exe"))}}: { "Outcome": "Converted", "Size": 1, "Modified": "2026-01-01T00:00:00Z" },
+    {{JsonSerializer.Serialize(P("neg.mkv"))}}: { "Outcome": "Converted", "Size": -1, "Modified": "2026-01-01T00:00:00Z" },
+    {{JsonSerializer.Serialize(P("null.mkv"))}}: null,
+    {{JsonSerializer.Serialize(P("ok.mkv"))}}: { "Outcome": "Skipped", "Size": 1, "Modified": "2026-01-01T00:00:00Z" }
+  } }
+""");
+var odd2 = ConvertHistory.Read(P("odd-history.json"));
+Check("imported history keeps only absolute videos and folders", odd2.Count == 1 && odd2.Find(P("ok.mkv")) is not null && odd2.Folders.SequenceEqual([dir]));
+Check("non-history JSON is rejected", Throws<InvalidDataException>(() => ConvertHistory.Read(P("bad.json")))
+    && Throws<InvalidDataException>(() => ConvertHistory.Read(P("session.json"))));
+reread.Clear();
+Check("clear forgets files and folders", reread.Count == 0 && reread.Folders.Count == 0);
+
 // MAPPING
 
 var (clean, dropped) = PresetConverter.SanitizeEncoderOptions(@"ref=4:dump-yuv=out.yuv:csv=C\x.csv:aq-mode=3:qpfile=q.txt");

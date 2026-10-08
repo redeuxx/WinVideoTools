@@ -71,7 +71,7 @@ public sealed record ConvertSession(List<string> Folders, List<SessionItem> Item
     }
 
     // Null for anything but a plain absolute path. GetFullPath throws on characters such as NUL, which would otherwise crash the load.
-    private static string? FullPath(string? p)
+    internal static string? FullPath(string? p)
     {
         if (p is null || p.IndexOfAny(Path.GetInvalidPathChars()) >= 0 || !Path.IsPathFullyQualified(p)) return null;
         try { return Path.GetFullPath(p); }

@@ -74,9 +74,9 @@
             <app:WrapPanel>
                 <Button x:Name="AddFilesButton" Content="Add files..." Click="AddFiles_Click" />
                 <Button x:Name="AddFolderButton" Content="Add folder..." Click="AddFolder_Click"
-                        ToolTipService.ToolTip="Adds every video in the folder and its subfolders" />
+                        ToolTipService.ToolTip="Adds every video in the folder and its subfolders, except ones the history says are already processed and unchanged" />
                 <Button x:Name="RescanButton" Content="Rescan folders" Click="Rescan_Click" IsEnabled="False"
-                        ToolTipService.ToolTip="Look in the folders already added for videos that are not in the list yet, and queue them" />
+                        ToolTipService.ToolTip="Look in every folder added before, in this list or the history, for videos that are new or changed since they were processed, and queue them" />
                 <Button x:Name="RemoveButton" Content="Remove selected" Click="Remove_Click" IsEnabled="False" />
                 <Button x:Name="ClearButton" Content="Clear list" Click="Clear_Click" IsEnabled="False" />
             </app:WrapPanel>
@@ -98,6 +98,30 @@
                             <MenuFlyoutSeparator />
                             <ToggleMenuFlyoutItem x:Name="AutosaveItem" Text="Autosave" Click="Autosave_Click"
                                                   ToolTipService.ToolTip="Keep the saved session file up to date as files are added and converted, and reopen it when the app starts" />
+                        </MenuFlyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+                <DropDownButton x:Name="HistoryButton" Content="History"
+                                ToolTipService.ToolTip="Every file converted, discarded or skipped, kept across sessions so they are not queued again until they change">
+                    <DropDownButton.Flyout>
+                        <MenuFlyout Placement="Bottom">
+                            <MenuFlyoutItem Text="Import history..." Click="ImportHistory_Click"
+                                            ToolTipService.ToolTip="Add the files and folders from a history file to this one">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8B5;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Text="Export history..." Click="ExportHistory_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xEDE1;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem Text="Clear history..." Click="ClearHistory_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE74D;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
                         </MenuFlyout>
                     </DropDownButton.Flyout>
                 </DropDownButton>

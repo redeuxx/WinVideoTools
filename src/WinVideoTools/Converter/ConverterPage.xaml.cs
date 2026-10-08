@@ -51,6 +51,13 @@ public sealed partial class ConverterPage : Page
     private bool _adding;
     // True while AddPaths fills _items, so the list syncs once at the end rather than once per file.
     private bool _bulkAdding;
+    // Every file processed and folder added, across all lists and sessions.
+    private static readonly string HistoryPath = Path.Combine(Path.GetDirectoryName(SettingsPath)!, "converter-history.json");
+    private ConvertHistory _history = new();
+    // False when an unreadable history could not be set aside; saving would then overwrite it.
+    private bool _historyWritable = true;
+    // History writes run one after another so two never share the temporary file.
+    private Task _historySaving = Task.CompletedTask;
     // Non-null while paused; completing it lets the queue continue.
     private TaskCompletionSource? _resume;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -91,6 +98,9 @@ public sealed partial class ConverterPage : Page
             settings.SkipHevc, settings.SkipHevcUpTo1080p, settings.DeleteLarger, settings.DeleteOriginal, settings.AutoScroll));
         AutosaveItem.IsChecked = settings.Autosave;
         _settingsLoaded = true;
+        LoadHistory();
+        // Rescan opens up once the history has folders.
+        SetBusy(false);
         FileDrop.Attach(this, "Add to queue", () => _cts is null && !_adding, OnDropAsync);
         WatchManualScrolling();
         RestoreOnStartup(settings);
@@ -352,10 +362,12 @@ public sealed partial class ConverterPage : Page
         if (await FileActions.PickFolderAsync() is { } folder) await AddFolderAsync(folder);
     }
 
-    /// <returns>How many videos were new to the list.</returns>
+    /// <returns>How many videos were queued, new or changed.</returns>
     private async Task<int> AddFolderAsync(string folder)
     {
         if (!_folders.Contains(folder, StringComparer.OrdinalIgnoreCase)) _folders.Add(folder);
+        _history.AddFolder(folder);
+        SaveHistory();
         // Listing a large tree can take a while; show it moving. Reports can land after Find returns, so they stop at _adding.
         _adding = true;
         SetBusy(_cts is not null);
@@ -379,21 +391,48 @@ public sealed partial class ConverterPage : Page
         }
     }
 
-    // Sizes come from the FileInfo; ones from a folder listing are already filled in, so no disk access per file.
-    /// <returns>How many videos were new to the list.</returns>
+    /// <summary>
+    /// Queues new videos, leaving out ones the history says were processed and have not changed since.
+    /// A listed file that finished but has changed since is queued again.
+    /// Sizes and times come from the FileInfo; ones from a folder listing are already filled in, so no disk access per file.
+    /// </summary>
+    /// <returns>How many videos were queued, new or changed.</returns>
     private int AddPaths(IEnumerable<FileInfo> files)
     {
-        var known = _items.Select(i => i.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        int skipped = 0, added = 0;
+        var listed = _items.ToDictionary(i => i.Path, StringComparer.OrdinalIgnoreCase);
+        bool skipHevc = SkipHevcBox.IsChecked == true, skipHevcUpTo1080p = SkipHevc1080Box.IsChecked == true;
+        int skipped = 0, added = 0, leftOut = 0;
         _bulkAdding = true;
         try
         {
             foreach (var file in files)
             {
-                if (!VideoFiles.IsVideo(file.FullName)) skipped++;
-                else if (known.Add(file.FullName))
+                if (!VideoFiles.IsVideo(file.FullName))
                 {
-                    _items.Add(new ConvertItem(file.FullName, SizeOf(file)));
+                    skipped++;
+                    continue;
+                }
+                var now = ConvertHistory.Stat(file);
+                if (listed.TryGetValue(file.FullName, out var item))
+                {
+                    if (item.Status is ConvertStatus.Done or ConvertStatus.Skipped && _history.Changed(item.Path, now))
+                    {
+                        // The last run's result no longer describes this file.
+                        item.InputSize = now!.Value.Size;
+                        item.OutputSize = null;
+                        item.SizeRatio = null;
+                        item.Summary = "";
+                        item.Decision = "Changed since it was processed";
+                        item.Status = ConvertStatus.Queued;
+                        added++;
+                    }
+                }
+                else if (_history.IsProcessed(file.FullName, now, skipHevc, skipHevcUpTo1080p)) leftOut++;
+                else
+                {
+                    item = new ConvertItem(file.FullName, now?.Size ?? 0);
+                    _items.Add(item);
+                    listed.Add(item.Path, item);
                     added++;
                 }
             }
@@ -405,29 +444,27 @@ public sealed partial class ConverterPage : Page
         SyncView();
         SetBusy(_cts is not null);
         if (added > 0) SessionChanged();
-        if (skipped > 0) ShowInfo(InfoBarSeverity.Informational, $"Skipped {skipped} file{(skipped == 1 ? "" : "s")} that are not videos.");
+        var notes = new List<string>();
+        if (leftOut > 0) notes.Add($"Left out {leftOut} video{(leftOut == 1 ? "" : "s")} already processed; Rescan queues them if they change.");
+        if (skipped > 0) notes.Add($"Skipped {skipped} file{(skipped == 1 ? "" : "s")} that are not videos.");
+        if (notes.Count > 0) ShowInfo(InfoBarSeverity.Informational, string.Join(" ", notes));
         UpdateSummary();
         return added;
     }
 
-    // Only adds: files already listed keep their status, and ones gone from disk stay listed with their results.
+    // Looks in this list's folders and every folder in the history. Files already listed keep their status unless
+    // they changed since they finished, and ones gone from disk stay listed with their results.
     private async void Rescan_Click(object sender, RoutedEventArgs e)
     {
         int added = 0, missing = 0;
-        foreach (var folder in _folders.ToList())
+        foreach (var folder in _folders.Concat(_history.Folders).Distinct(StringComparer.OrdinalIgnoreCase).ToList())
         {
             if (Directory.Exists(folder)) added += await AddFolderAsync(folder);
             else missing++;
         }
-        var message = added == 0 ? "No new videos found." : $"Queued {added} new video{(added == 1 ? "" : "s")}.";
+        var message = added == 0 ? "No new or changed videos found." : $"Queued {added} new or changed video{(added == 1 ? "" : "s")}.";
         if (missing > 0) message += $" {missing} folder{(missing == 1 ? " was" : "s were")} not found.";
         ShowInfo(missing > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Informational, message);
-    }
-
-    private static long SizeOf(FileInfo file)
-    {
-        try { return file.Length; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return 0; }
     }
 
     private void Remove_Click(object sender, RoutedEventArgs e)
@@ -669,6 +706,7 @@ public sealed partial class ConverterPage : Page
         _autosave.Stop();
         // Waits on _saving, not the async method: its continuation needs this (blocked) UI thread. It sets _saving before yielding.
         if (AutosaveItem.IsChecked && _sessionFileDirty && _sessionPath is not null) _ = SaveSessionNowAsync();
+        _historySaving.Wait(TimeSpan.FromSeconds(5));
         try
         {
             if (_saving.Wait(TimeSpan.FromSeconds(5)) && !_lastSaveFailed) File.Delete(RecoveryPath);
@@ -677,6 +715,122 @@ public sealed partial class ConverterPage : Page
         {
             // Left behind, the list just comes back next start.
         }
+    }
+
+    // HISTORY
+
+    // An unreadable history is set aside rather than overwritten by the next save.
+    private void LoadHistory()
+    {
+        if (!File.Exists(HistoryPath)) return;
+        try
+        {
+            _history = ConvertHistory.Read(HistoryPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            try
+            {
+                File.Move(HistoryPath, HistoryPath + ".bad", overwrite: true);
+                ShowInfo(InfoBarSeverity.Warning, $"The convert history could not be read and was kept as {HistoryPath}.bad, so it starts empty: {ex.Message}");
+            }
+            catch (Exception moveEx) when (moveEx is IOException or UnauthorizedAccessException)
+            {
+                _historyWritable = false;
+                ShowInfo(InfoBarSeverity.Warning, $"The convert history could not be read, so nothing is remembered until the app restarts: {ex.Message}");
+            }
+        }
+    }
+
+    // ponytail: rewrites the whole file per change; fine for tens of thousands of files, an append log if it ever is not.
+    private void SaveHistory()
+    {
+        if (!_historyWritable) return;
+        var json = _history.ToJson();
+        _historySaving = _historySaving.ContinueWith(_ =>
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(HistoryPath)!);
+                ConvertHistory.WriteJson(HistoryPath, json);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                DispatcherQueue.TryEnqueue(() => ShowInfo(InfoBarSeverity.Warning, $"Could not save the convert history: {ex.Message}"));
+            }
+        }, TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// Remembers a finished file, and an output it wrote under another name, so neither is queued again until it changes.
+    /// Failed and cancelled files are not remembered, so they are tried again.
+    /// </summary>
+    private async Task RecordAsync(ConvertItem item)
+    {
+        HistoryOutcome? outcome = item.Status switch
+        {
+            ConvertStatus.Skipped => HistoryOutcome.Skipped,
+            ConvertStatus.Done when item.OutputPath is null && !item.OriginalDeleted => HistoryOutcome.Discarded,
+            ConvertStatus.Done => HistoryOutcome.Converted,
+            _ => null,
+        };
+        if (outcome is null) return;
+        var output = item.OutputPath is { } o && !string.Equals(o, item.Path, StringComparison.OrdinalIgnoreCase) ? o : null;
+        // Off the UI thread, as either file may be on a network share.
+        var (source, written) = await Task.Run(() =>
+            (ConvertHistory.Stat(new FileInfo(item.Path)), output is null ? null : ConvertHistory.Stat(new FileInfo(output))));
+        if (source is { } s) _history.Record(item.Path, outcome.Value, s.Size, s.Modified, item.SkippedUpTo1080p);
+        if (written is { } w) _history.Record(output!, HistoryOutcome.Output, w.Size, w.Modified);
+        SaveHistory();
+    }
+
+    private async void ImportHistory_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new FileOpenPicker(App.MainWindow!.AppWindow.Id);
+        picker.FileTypeFilter.Add(".json");
+        if (await picker.PickSingleFileAsync() is not { } file) return;
+        ConvertHistory imported;
+        try
+        {
+            imported = await Task.Run(() => ConvertHistory.Read(file.Path));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            ShowInfo(InfoBarSeverity.Error, $"Could not import {Path.GetFileName(file.Path)}: {ex.Message}");
+            return;
+        }
+        _history.Merge(imported);
+        SaveHistory();
+        SetBusy(_cts is not null);
+        ShowInfo(InfoBarSeverity.Success, $"Added {imported.Count} files and {imported.Folders.Count} folders to the convert history.");
+    }
+
+    private async void ExportHistory_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new FileSavePicker(App.MainWindow!.AppWindow.Id) { SuggestedFileName = "Convert history" };
+        picker.FileTypeChoices.Add("Convert history", [".json"]);
+        if (await picker.PickSaveFileAsync() is not { } result) return;
+        var json = _history.ToJson();
+        try
+        {
+            await Task.Run(() => ConvertHistory.WriteJson(result.Path, json));
+            ShowInfo(InfoBarSeverity.Success, $"Saved {result.Path}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowInfo(InfoBarSeverity.Error, $"Could not save: {ex.Message}");
+        }
+    }
+
+    private async void ClearHistory_Click(object sender, RoutedEventArgs e)
+    {
+        if (!await ConfirmAsync("Clear the convert history?",
+                $"Forgets {_history.Count} processed files and {_history.Folders.Count} folders, so adding those folders queues every video again. "
+                + "Converted files are not affected. Export the history first to keep a copy.", "Clear"))
+            return;
+        _history.Clear();
+        SaveHistory();
+        SetBusy(_cts is not null);
     }
 
     // FILTER
@@ -828,12 +982,24 @@ public sealed partial class ConverterPage : Page
                     Info.IsOpen = false;
                 }
                 if (!_items.Contains(item)) continue;
+                // Another list or session may have processed this file since it was queued.
+                var now = await Task.Run(() => ConvertHistory.Stat(new FileInfo(item.Path)));
+                if (_history.IsProcessed(item.Path, now, skipHevc, skipHevcUpTo1080p) && _history.Find(item.Path) is { } known)
+                {
+                    item.SkippedUpTo1080p = known.SkippedUpTo1080p;
+                    item.Summary = "Already processed";
+                    item.Decision = $"Unchanged since the convert history recorded it as {known.Outcome.ToString().ToLowerInvariant()}";
+                    item.Status = known.Outcome == HistoryOutcome.Skipped ? ConvertStatus.Skipped : ConvertStatus.Done;
+                    OverallProgress.Value = (double)++done / pending.Count;
+                    continue;
+                }
                 if (AutoScrollBox.IsChecked == true && _view.Contains(item)) Queue.ScrollIntoView(item);
                 var converting = ConvertOneAsync(item, preset, ffmpeg, outFolder, deleteLarger, deleteOriginal, skipHevc, skipHevcUpTo1080p, ct);
                 UpdateSummary();
                 try { await converting; }
                 // The status flips before the result fields are filled in, so save again once the file is fully done.
                 finally { UpdateSummary(); SessionChanged(); }
+                await RecordAsync(item);
                 OverallProgress.Value = (double)++done / pending.Count;
             }
             finished = true;
@@ -1051,7 +1217,7 @@ public sealed partial class ConverterPage : Page
         OutputBox.IsEnabled = BrowseOutputButton.IsEnabled = !busy && SameFolderBox.IsChecked != true;
         RemoveButton.IsEnabled = !busy && !_adding && Queue.SelectedItems.Count > 0;
         ClearButton.IsEnabled = !busy && !_adding && _items.Count > 0;
-        RescanButton.IsEnabled = !busy && !_adding && _folders.Count > 0;
+        RescanButton.IsEnabled = !busy && !_adding && (_folders.Count > 0 || _history.Folders.Count > 0);
         SaveSessionItem.IsEnabled = !_adding && _items.Count > 0;
         LoadSessionItem.IsEnabled = !busy && !_adding;
         OverallProgress.Visibility = busy || _adding ? Visibility.Visible : Visibility.Collapsed;

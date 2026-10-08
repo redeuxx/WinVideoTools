@@ -12,6 +12,7 @@
     <Compile Include="..\..\src\WinVideoTools\Converter\HandBrakePreset.cs" Link="HandBrakePreset.cs" />
     <Compile Include="..\..\src\WinVideoTools\Converter\PresetConverter.cs" Link="PresetConverter.cs" />
     <Compile Include="..\..\src\WinVideoTools\Converter\ConvertSession.cs" Link="ConvertSession.cs" />
+    <Compile Include="..\..\src\WinVideoTools\Converter\ConvertHistory.cs" Link="ConvertHistory.cs" />
     <Compile Include="..\..\src\WinVideoTools\VideoFiles.cs" Link="VideoFiles.cs" />
   </ItemGroup>
 

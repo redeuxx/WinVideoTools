@@ -855,8 +855,16 @@ public sealed partial class ConverterPage : Page
 
     private void Queue_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        DetailsBox.Text = Queue.SelectedItems.Count == 1 && Queue.SelectedItems[0] is ConvertItem item ? item.Details : "";
+        // Ticking a row adds to the selection, so show the file just ticked; otherwise show the selected file, if only one is.
+        DetailsBox.Text = e.AddedItems is [ConvertItem added] ? added.Details
+            : Queue.SelectedItems.Count == 1 && Queue.SelectedItems[0] is ConvertItem item ? item.Details : "";
         SetBusy(_cts is not null);
+    }
+
+    // Arrow keys move focus without ticking rows, so the log follows the focused row too.
+    private void Queue_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is ListViewItem { Content: ConvertItem item }) DetailsBox.Text = item.Details;
     }
 
     // OPEN
@@ -918,12 +926,7 @@ public sealed partial class ConverterPage : Page
 
     private async void Convert_Click(object sender, RoutedEventArgs e)
     {
-        if (_cts is not null)
-        {
-            _cts.Cancel();
-            return;
-        }
-        if (Preset is not { } preset) return;
+        if (_cts is not null || Preset is not { } preset) return;
         if (!await FfmpegPrompt.EnsureAsync(XamlRoot)) return;
         var ffmpeg = Ffmpeg.ExePath;
         // Empty means next to each source.
@@ -959,6 +962,16 @@ public sealed partial class ConverterPage : Page
                 "When a converted file is smaller than its source and the full length, the source file is permanently deleted. This cannot be undone.",
                 "Convert"))
             return;
+
+        // Failed, cancelled and re-run skipped files are waiting again, so the summary and filter count them that way now,
+        // not only once the queue reaches them. ConvertOneAsync clears the rest of the old result when each one starts.
+        foreach (var item in pending.Where(i => i.Status != ConvertStatus.Queued))
+        {
+            item.Summary = "";
+            item.Decision = "";
+            item.Status = ConvertStatus.Queued;
+        }
+        UpdateSummary();
 
         Info.IsOpen = false;
         _cts = new CancellationTokenSource();
@@ -1073,7 +1086,7 @@ public sealed partial class ConverterPage : Page
         }
     }
 
-    private void Pause_Click(object sender, RoutedEventArgs e)
+    private void Pause_Click(SplitButton sender, SplitButtonClickEventArgs e)
     {
         if (_resume is null)
         {
@@ -1088,6 +1101,8 @@ public sealed partial class ConverterPage : Page
         }
         SetBusy(true);
     }
+
+    private void Cancel_Click(object sender, RoutedEventArgs e) => _cts?.Cancel();
 
     // Runs on the UI thread; only the ffmpeg work inside PresetConverter leaves it.
     private static async Task ConvertOneAsync(ConvertItem item, HandBrakePreset preset, string ffmpeg, string outFolder,
@@ -1202,10 +1217,13 @@ public sealed partial class ConverterPage : Page
     private void SetBusy(bool busy)
     {
         var hasPreset = Preset is not null;
-        ConvertButton.Content = busy ? "Cancel" : "Convert";
-        ConvertButton.IsEnabled = busy || (!_adding && hasPreset && _items.Count > 0);
-        PauseButton.Content = _resume is null ? "Pause" : "Resume";
-        PauseButton.IsEnabled = busy;
+        // Keyboard focus follows the swap, so it is not dropped when the focused button collapses.
+        var moveFocus = (busy ? ConvertButton.FocusState : RunButton.FocusState) != FocusState.Unfocused;
+        ConvertButton.Visibility = busy ? Visibility.Collapsed : Visibility.Visible;
+        ConvertButton.IsEnabled = !_adding && hasPreset && _items.Count > 0;
+        RunButton.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        RunButton.Content = _resume is null ? "Pause" : "Resume";
+        if (moveFocus) (busy ? (Control)RunButton : ConvertButton).Focus(FocusState.Programmatic);
         PresetBox.IsEnabled = ImportButton.IsEnabled = !busy;
         ExportButton.IsEnabled = DeletePresetButton.IsEnabled = !busy && hasPreset;
         // Options are read when Convert is pressed, so the dialog stays viewable but read-only while a queue runs.
@@ -1213,11 +1231,14 @@ public sealed partial class ConverterPage : Page
         SkipHevcBox.IsEnabled = DeleteLargerBox.IsEnabled = DeleteOriginalBox.IsEnabled = !busy;
         SkipHevc1080Box.IsEnabled = !busy && SkipHevcBox.IsChecked == true;
         SameFolderBox.IsEnabled = !busy;
-        AddFilesButton.IsEnabled = AddFolderButton.IsEnabled = !busy && !_adding;
+        ListButton.IsEnabled = !busy && !_adding;
         OutputBox.IsEnabled = BrowseOutputButton.IsEnabled = !busy && SameFolderBox.IsChecked != true;
+        // Hidden by opacity, not collapsed, so it keeps its place in the toolbar; disabled, it takes no clicks or focus.
+        RemoveButton.Opacity = Queue.SelectedItems.Count > 0 ? 1 : 0;
         RemoveButton.IsEnabled = !busy && !_adding && Queue.SelectedItems.Count > 0;
-        ClearButton.IsEnabled = !busy && !_adding && _items.Count > 0;
-        RescanButton.IsEnabled = !busy && !_adding && (_folders.Count > 0 || _history.Folders.Count > 0);
+        // The List dropdown is off while busy or adding, so these only track whether there is anything to act on.
+        ClearItem.IsEnabled = _items.Count > 0;
+        RescanItem.IsEnabled = _folders.Count > 0 || _history.Folders.Count > 0;
         SaveSessionItem.IsEnabled = !_adding && _items.Count > 0;
         LoadSessionItem.IsEnabled = !busy && !_adding;
         OverallProgress.Visibility = busy || _adding ? Visibility.Visible : Visibility.Collapsed;

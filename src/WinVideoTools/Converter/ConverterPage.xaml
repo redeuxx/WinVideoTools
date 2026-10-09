@@ -69,16 +69,42 @@
         </ContentDialog>
 
         <!-- Groups wrap as units so related controls stay together when the window is narrow.
-             Convert and Pause have a MinWidth so swapping to Cancel or Resume does not move them to another line. -->
+             Convert and the run button share a MinWidth, and Remove selected keeps its place while hidden,
+             so swapping or showing them never moves controls to another line or shifts the list under the pointer. -->
         <app:WrapPanel Grid.Row="4" HorizontalSpacing="16">
             <app:WrapPanel>
-                <Button x:Name="AddFilesButton" Content="Add files..." Click="AddFiles_Click" />
-                <Button x:Name="AddFolderButton" Content="Add folder..." Click="AddFolder_Click"
-                        ToolTipService.ToolTip="Adds every video in the folder and its subfolders, except ones the history says are already processed and unchanged" />
-                <Button x:Name="RescanButton" Content="Rescan folders" Click="Rescan_Click" IsEnabled="False"
-                        ToolTipService.ToolTip="Look in every folder added before, in this list or the history, for videos that are new or changed since they were processed, and queue them" />
-                <Button x:Name="RemoveButton" Content="Remove selected" Click="Remove_Click" IsEnabled="False" />
-                <Button x:Name="ClearButton" Content="Clear list" Click="Clear_Click" IsEnabled="False" />
+                <DropDownButton x:Name="ListButton" Content="List"
+                                ToolTipService.ToolTip="Add files or folders, look for new videos in folders added before, or clear the list">
+                    <DropDownButton.Flyout>
+                        <MenuFlyout Placement="Bottom">
+                            <MenuFlyoutItem Text="Add files..." Click="AddFiles_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8E5;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Text="Add folder..." Click="AddFolder_Click"
+                                            ToolTipService.ToolTip="Adds every video in the folder and its subfolders, except ones the history says are already processed and unchanged">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8B7;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem x:Name="RescanItem" Text="Rescan folders" Click="Rescan_Click" IsEnabled="False"
+                                            ToolTipService.ToolTip="Look in every folder added before, in this list or the history, for videos that are new or changed since they were processed, and queue them">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE72C;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem x:Name="ClearItem" Text="Clear list" Click="Clear_Click" IsEnabled="False">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE74D;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+                <Button x:Name="RemoveButton" Content="Remove selected" Click="Remove_Click" IsEnabled="False" Opacity="0" />
             </app:WrapPanel>
             <app:WrapPanel>
                 <DropDownButton x:Name="SessionButton" Content="Session"
@@ -134,9 +160,21 @@
                 </Button>
             </app:WrapPanel>
             <app:WrapPanel>
-                <Button x:Name="ConvertButton" Content="Convert" MinWidth="80" Style="{StaticResource AccentButtonStyle}" Click="Convert_Click" IsEnabled="False" />
-                <Button x:Name="PauseButton" Content="Pause" MinWidth="80" Click="Pause_Click" IsEnabled="False"
-                        ToolTipService.ToolTip="Let the current file finish, then hold the rest of the queue until you resume" />
+                <!-- Only one of these shows: Convert while idle, the run button while a queue runs. -->
+                <Button x:Name="ConvertButton" Content="Convert" MinWidth="120" Style="{StaticResource AccentButtonStyle}" Click="Convert_Click" IsEnabled="False" />
+                <SplitButton x:Name="RunButton" Content="Pause" MinWidth="120" Click="Pause_Click" Visibility="Collapsed"
+                             ToolTipService.ToolTip="Pause lets the current file finish, then holds the rest of the queue until you resume. Cancel is under the arrow.">
+                    <SplitButton.Flyout>
+                        <MenuFlyout Placement="Bottom">
+                            <MenuFlyoutItem Text="Cancel" Click="Cancel_Click"
+                                            ToolTipService.ToolTip="Stop now. The file being converted is discarded and the original kept.">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE711;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </SplitButton.Flyout>
+                </SplitButton>
                 <CheckBox x:Name="AutoScrollBox" Content="Auto-scroll" VerticalAlignment="Center"
                           Checked="Setting_Changed" Unchecked="Setting_Changed"
                           ToolTipService.ToolTip="Scroll the list to each file as it starts converting" />
@@ -165,8 +203,9 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <!-- Outside the ListView so it stays put while the list scrolls; padding matches the item container's margin + padding. -->
-            <Grid ColumnSpacing="12" Padding="20,8,16,8" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+            <!-- Outside the ListView so it stays put while the list scrolls; padding matches the item container's margin + padding
+                 plus the 24px each row's selection checkbox takes. -->
+            <Grid ColumnSpacing="12" Padding="44,8,16,8" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="90" />
                     <ColumnDefinition Width="3*" />
@@ -182,7 +221,7 @@
                 <TextBlock Grid.Column="4" Text="Result" Style="{StaticResource BodyStrongTextBlockStyle}" />
                 <TextBlock Grid.Column="5" Text="Decision" Style="{StaticResource BodyStrongTextBlockStyle}" />
             </Grid>
-        <ListView x:Name="Queue" Grid.Row="1" SelectionMode="Extended" SelectionChanged="Queue_SelectionChanged" DoubleTapped="Queue_DoubleTapped">
+        <ListView x:Name="Queue" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="Queue_SelectionChanged" GotFocus="Queue_GotFocus" DoubleTapped="Queue_DoubleTapped">
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="local:ConvertItem">
                     <Grid ColumnSpacing="12" Padding="0,6" Background="Transparent">

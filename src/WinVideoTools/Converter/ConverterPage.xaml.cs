@@ -799,10 +799,20 @@ public sealed partial class ConverterPage : Page
             ShowInfo(InfoBarSeverity.Error, $"Could not import {Path.GetFileName(file.Path)}: {ex.Message}");
             return;
         }
+        var shared = _history.CountShared(imported);
+        if (!await ConfirmAsync("Import into the convert history?",
+                $"Merges {imported.Count:N0} files and {imported.Folders.Count:N0} folders from {Path.GetFileName(file.Path)} into your history. "
+                + "Nothing already in your history is removed; to replace it instead, clear it first and then import.\n\n"
+                + (shared == 0 ? "None of these files are in your history yet."
+                    : $"{shared:N0} of these files are already in your history, and the imported entries replace yours, even where yours are newer. "
+                      + "That can only queue a file again, never skip one that changed: a file counts as processed only while its size and modified time match its entry.")
+                + "\n\nEntries only match files at the same full paths, such as the same drive letters or network share.",
+                "Import"))
+            return;
         _history.Merge(imported);
         SaveHistory();
         SetBusy(_cts is not null);
-        ShowInfo(InfoBarSeverity.Success, $"Added {imported.Count} files and {imported.Folders.Count} folders to the convert history.");
+        ShowInfo(InfoBarSeverity.Success, $"Merged {imported.Count:N0} files and {imported.Folders.Count:N0} folders into the convert history.");
     }
 
     private async void ExportHistory_Click(object sender, RoutedEventArgs e)
@@ -814,7 +824,8 @@ public sealed partial class ConverterPage : Page
         try
         {
             await Task.Run(() => ConvertHistory.WriteJson(result.Path, json));
-            ShowInfo(InfoBarSeverity.Success, $"Saved {result.Path}");
+            ShowInfo(InfoBarSeverity.Success, $"Saved {_history.Count:N0} files and {_history.Folders.Count:N0} folders to {result.Path}. "
+                + "Importing it merges it into that history rather than replacing it, and its entries only match files at the same full paths.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -826,7 +837,8 @@ public sealed partial class ConverterPage : Page
     {
         if (!await ConfirmAsync("Clear the convert history?",
                 $"Forgets {_history.Count} processed files and {_history.Folders.Count} folders, so adding those folders queues every video again. "
-                + "Converted files are not affected. Export the history first to keep a copy.", "Clear"))
+                + "Converted files are not affected. Export the history first to keep a copy.\n\n"
+                + "To replace your history with another one, clear it and then import that one; importing alone merges.", "Clear"))
             return;
         _history.Clear();
         SaveHistory();

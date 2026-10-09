@@ -146,6 +146,7 @@ Check("changed time is queued again", !reread.IsProcessed(P("h2.mkv"), touched, 
 var other = new ConvertHistory();
 other.Record(P("h1.mkv"), HistoryOutcome.Converted, changed!.Value.Size, changed.Value.Modified);
 other.AddFolder(P("more"));
+Check("import counts files already in the history", reread.CountShared(other) == 1);
 reread.Merge(other);
 Check("import adds folders and its entries win", reread.Find(P("h1.mkv"))?.Outcome == HistoryOutcome.Converted
     && reread.IsProcessed(P("h1.mkv"), changed, false, false) && reread.Folders.Count == 2 && reread.Count == 3);

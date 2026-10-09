@@ -132,18 +132,20 @@
                     <DropDownButton.Flyout>
                         <MenuFlyout Placement="Bottom">
                             <MenuFlyoutItem Text="Import history..." Click="ImportHistory_Click"
-                                            ToolTipService.ToolTip="Add the files and folders from a history file to this one">
+                                            ToolTipService.ToolTip="Merge a history file into this one. Nothing here is removed; for a file in both, the imported entry is used">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE8B5;" />
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem Text="Export history..." Click="ExportHistory_Click">
+                            <MenuFlyoutItem Text="Export history..." Click="ExportHistory_Click"
+                                            ToolTipService.ToolTip="Save this history as a file. Importing it elsewhere merges it into that history; its entries only match files at the same full paths">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xEDE1;" />
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
                             <MenuFlyoutSeparator />
-                            <MenuFlyoutItem Text="Clear history..." Click="ClearHistory_Click">
+                            <MenuFlyoutItem Text="Clear history..." Click="ClearHistory_Click"
+                                            ToolTipService.ToolTip="Forget every processed file and folder. To replace this history with another, clear it and then import">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE74D;" />
                                 </MenuFlyoutItem.Icon>

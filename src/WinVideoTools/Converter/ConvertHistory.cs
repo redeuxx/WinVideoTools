@@ -57,6 +57,9 @@ public sealed class ConvertHistory
         foreach (var (path, entry) in other._files) _files[path] = entry;
     }
 
+    /// <summary>How many of the other history's files this one already has an entry for.</summary>
+    public int CountShared(ConvertHistory other) => other._files.Keys.Count(_files.ContainsKey);
+
     public void Clear()
     {
         _folders.Clear();

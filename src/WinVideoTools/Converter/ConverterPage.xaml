@@ -69,11 +69,10 @@
         </ContentDialog>
 
         <!-- Groups wrap as units so related controls stay together when the window is narrow.
-             Convert and the run button share a MinWidth, and Remove selected keeps its place while hidden,
-             so swapping or showing them never moves controls to another line or shifts the list under the pointer. -->
+             Convert and the run button share a MinWidth so swapping them never moves controls to another line. -->
         <app:WrapPanel Grid.Row="4" HorizontalSpacing="16">
             <app:WrapPanel>
-                <DropDownButton x:Name="ListButton" Content="List"
+                <DropDownButton x:Name="FilesButton" Content="Files"
                                 ToolTipService.ToolTip="Add files or folders, look for new videos in folders added before, or clear the list">
                     <DropDownButton.Flyout>
                         <MenuFlyout Placement="Bottom">
@@ -104,7 +103,6 @@
                         </MenuFlyout>
                     </DropDownButton.Flyout>
                 </DropDownButton>
-                <Button x:Name="RemoveButton" Content="Remove selected" Click="Remove_Click" IsEnabled="False" Opacity="0" />
             </app:WrapPanel>
             <app:WrapPanel>
                 <DropDownButton x:Name="SessionButton" Content="Session"
@@ -296,7 +294,21 @@
         </ListView>
         </Grid>
 
-        <TextBox x:Name="DetailsBox" Grid.Row="7" Header="ffmpeg command and log for selected file" IsReadOnly="True" TextWrapping="Wrap"
-                 AcceptsReturn="True" Height="140" FontFamily="Consolas" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+        <!-- Remove selected keeps its place while hidden, so showing it never resizes the list under the pointer. -->
+        <Grid Grid.Row="7" RowSpacing="4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="ffmpeg command and log for selected file" VerticalAlignment="Bottom" />
+            <Button x:Name="RemoveButton" Grid.Column="1" Content="Remove selected" Click="Remove_Click" IsEnabled="False" Opacity="0" />
+            <TextBox x:Name="DetailsBox" Grid.Row="1" Grid.ColumnSpan="2" AutomationProperties.Name="ffmpeg command and log for selected file"
+                     IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" Height="140" FontFamily="Consolas"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+        </Grid>
     </Grid>
 </Page>

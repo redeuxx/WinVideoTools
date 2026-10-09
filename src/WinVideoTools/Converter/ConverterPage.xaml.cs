@@ -1243,12 +1243,12 @@ public sealed partial class ConverterPage : Page
         SkipHevcBox.IsEnabled = DeleteLargerBox.IsEnabled = DeleteOriginalBox.IsEnabled = !busy;
         SkipHevc1080Box.IsEnabled = !busy && SkipHevcBox.IsChecked == true;
         SameFolderBox.IsEnabled = !busy;
-        ListButton.IsEnabled = !busy && !_adding;
+        FilesButton.IsEnabled = !busy && !_adding;
         OutputBox.IsEnabled = BrowseOutputButton.IsEnabled = !busy && SameFolderBox.IsChecked != true;
         // Hidden by opacity, not collapsed, so it keeps its place in the toolbar; disabled, it takes no clicks or focus.
         RemoveButton.Opacity = Queue.SelectedItems.Count > 0 ? 1 : 0;
         RemoveButton.IsEnabled = !busy && !_adding && Queue.SelectedItems.Count > 0;
-        // The List dropdown is off while busy or adding, so these only track whether there is anything to act on.
+        // The Files dropdown is off while busy or adding, so these only track whether there is anything to act on.
         ClearItem.IsEnabled = _items.Count > 0;
         RescanItem.IsEnabled = _folders.Count > 0 || _history.Folders.Count > 0;
         SaveSessionItem.IsEnabled = !_adding && _items.Count > 0;

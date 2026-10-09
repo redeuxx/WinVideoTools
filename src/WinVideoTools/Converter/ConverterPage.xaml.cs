@@ -491,6 +491,20 @@ public sealed partial class ConverterPage : Page
 
     // SESSION
 
+    // Filled in on open, so it always names the file the next save goes to.
+    private void SessionMenu_Opening(object sender, object e) =>
+        SessionPathItem.Text = _sessionPath is not { } path ? "No session file"
+            : AutosaveItem.IsChecked ? $"Autosaving to: {ShortPath(path)}"
+            : $"Session file: {ShortPath(path)} (not autosaving)";
+
+    // ponytail: keeps the drive and the end of the path; a long folder name can be cut mid-word.
+    private static string ShortPath(string path, int max = 80)
+    {
+        if (path.Length <= max) return path;
+        var root = Path.GetPathRoot(path) ?? "";
+        return root + "..." + path[^Math.Max(0, max - root.Length - 3)..];
+    }
+
     private void SaveSession_Click(object sender, RoutedEventArgs e) => _ = SaveSessionAsAsync();
 
     /// <summary>Asks where to save, writes the session there and makes it the file Autosave keeps current.</summary>

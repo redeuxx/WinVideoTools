@@ -108,7 +108,9 @@
                 <DropDownButton x:Name="SessionButton" Content="Session"
                                 ToolTipService.ToolTip="Save the list and each file's result to pick up later">
                     <DropDownButton.Flyout>
-                        <MenuFlyout Placement="Bottom">
+                        <MenuFlyout Placement="Bottom" Opening="SessionMenu_Opening">
+                            <MenuFlyoutItem x:Name="SessionPathItem" IsEnabled="False" />
+                            <MenuFlyoutSeparator />
                             <MenuFlyoutItem x:Name="SaveSessionItem" Text="Save session..." Click="SaveSession_Click" IsEnabled="False">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE74E;" />

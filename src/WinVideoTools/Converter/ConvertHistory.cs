@@ -25,6 +25,8 @@ public sealed class ConvertHistory
     public IReadOnlyList<string> Folders => _folders;
     public int Count => _files.Count;
 
+    public int CountOf(HistoryOutcome outcome) => _files.Values.Count(e => e.Outcome == outcome);
+
     public void AddFolder(string folder)
     {
         if (!_folders.Contains(folder, StringComparer.OrdinalIgnoreCase)) _folders.Add(folder);

@@ -135,6 +135,7 @@ var reread = ConvertHistory.Read(P("history.json"));
 Check("history round-trips with exact times", reread.Count == 3 && reread.IsProcessed(P("h1.mkv"), ConvertHistory.Stat(new FileInfo(P("h1.mkv"))), false, false)
     && reread.Find(P("h2.mkv"))?.Outcome == HistoryOutcome.Skipped && reread.Folders.SequenceEqual([dir]));
 Check("history write leaves no temp file", !File.Exists(P("history.json.tmp")));
+Check("history counts by outcome", reread.CountOf(HistoryOutcome.Discarded) == 1 && reread.CountOf(HistoryOutcome.Output) == 1 && reread.CountOf(HistoryOutcome.Converted) == 0);
 
 File.AppendAllText(P("h1.mkv"), " and changed");
 var changed = ConvertHistory.Stat(new FileInfo(P("h1.mkv")));
@@ -167,6 +168,24 @@ Check("non-history JSON is rejected", Throws<InvalidDataException>(() => Convert
     && Throws<InvalidDataException>(() => ConvertHistory.Read(P("session.json"))));
 reread.Clear();
 Check("clear forgets files and folders", reread.Count == 0 && reread.Folders.Count == 0);
+
+// STATS
+
+var stats = new ConvertStats();
+var minute = TimeSpan.FromMinutes(1);
+stats.Add(ConvertStatus.Done, "a.mkv", 100, 40, outputKept: true, originalDeleted: true, minute);
+stats.Add(ConvertStatus.Done, "b.mkv", 100, 90, outputKept: true, originalDeleted: false, minute);
+stats.Add(ConvertStatus.Done, "c.mkv", 100, 150, outputKept: false, originalDeleted: false, minute);
+stats.Add(ConvertStatus.Skipped, "d.mkv", 100, null, false, false, minute);
+stats.Add(ConvertStatus.Failed, "e.mkv", 100, null, false, false, minute);
+stats.Add(ConvertStatus.Cancelled, "f.mkv", 100, null, false, false, minute);
+Check("stats count each outcome once", stats is { Converted: 2, Discarded: 1, Skipped: 1, Failed: 1, OriginalsDeleted: 1 });
+Check("stats save only kept outputs", stats is { InputBytes: 200, OutputBytes: 130, SavedBytes: 70, FreedBytes: 60, BiggestSavingName: "a.mkv", BiggestSavingBytes: 60 });
+Check("stats time encoding, not skips or cancels", stats.EncodeTime == 4 * minute);
+File.WriteAllText(P("stats.json"), stats.ToJson());
+var restats = ConvertStats.Read(P("stats.json"));
+Check("stats round-trip", restats.SinceUtc == stats.SinceUtc && restats.SavedBytes == 70 && restats.EncodeTime == stats.EncodeTime && restats.LastConvertedUtc == stats.LastConvertedUtc);
+Check("non-stats JSON is rejected", Throws<InvalidDataException>(() => ConvertStats.Read(P("bad.json"))));
 
 // MAPPING
 

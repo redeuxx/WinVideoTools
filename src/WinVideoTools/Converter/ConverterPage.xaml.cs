@@ -56,8 +56,13 @@ public sealed partial class ConverterPage : Page
     private ConvertHistory _history = new();
     // False when an unreadable history could not be set aside; saving would then overwrite it.
     private bool _historyWritable = true;
-    // History writes run one after another so two never share the temporary file.
+    // History and stats writes run one after another so two never share a temporary file.
     private Task _historySaving = Task.CompletedTask;
+    // Totals for every file finished, across all lists and sessions; clearing the history keeps them.
+    private static readonly string StatsPath = Path.Combine(Path.GetDirectoryName(SettingsPath)!, "converter-stats.json");
+    private ConvertStats _stats = new();
+    // False when unreadable stats could not be set aside; saving would then overwrite them.
+    private bool _statsWritable = true;
     // Non-null while paused; completing it lets the queue continue.
     private TaskCompletionSource? _resume;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -99,6 +104,7 @@ public sealed partial class ConverterPage : Page
         AutosaveItem.IsChecked = settings.Autosave;
         _settingsLoaded = true;
         LoadHistory();
+        LoadStats();
         // Rescan opens up once the history has folders.
         SetBusy(false);
         FileDrop.Attach(this, "Add to queue", () => _cts is null && !_adding, OnDropAsync);
@@ -759,18 +765,22 @@ public sealed partial class ConverterPage : Page
     // ponytail: rewrites the whole file per change; fine for tens of thousands of files, an append log if it ever is not.
     private void SaveHistory()
     {
-        if (!_historyWritable) return;
-        var json = _history.ToJson();
+        if (_historyWritable) QueueWrite(HistoryPath, _history.ToJson(), "convert history");
+    }
+
+    // Runs after any earlier history or stats write, off the UI thread.
+    private void QueueWrite(string path, string json, string what)
+    {
         _historySaving = _historySaving.ContinueWith(_ =>
         {
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(HistoryPath)!);
-                ConvertHistory.WriteJson(HistoryPath, json);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                ConvertHistory.WriteJson(path, json);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                DispatcherQueue.TryEnqueue(() => ShowInfo(InfoBarSeverity.Warning, $"Could not save the convert history: {ex.Message}"));
+                DispatcherQueue.TryEnqueue(() => ShowInfo(InfoBarSeverity.Warning, $"Could not save the {what}: {ex.Message}"));
             }
         }, TaskScheduler.Default);
     }
@@ -857,6 +867,119 @@ public sealed partial class ConverterPage : Page
         _history.Clear();
         SaveHistory();
         SetBusy(_cts is not null);
+    }
+
+    // STATS
+
+    // Missing stats start counting now, and are saved at once so that start date sticks. Unreadable ones are set aside like the history.
+    private void LoadStats()
+    {
+        try
+        {
+            if (File.Exists(StatsPath))
+            {
+                _stats = ConvertStats.Read(StatsPath);
+                return;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            try
+            {
+                File.Move(StatsPath, StatsPath + ".bad", overwrite: true);
+                ShowInfo(InfoBarSeverity.Warning, $"The convert stats could not be read and were kept as {StatsPath}.bad, so they start again from now: {ex.Message}");
+            }
+            catch (Exception moveEx) when (moveEx is IOException or UnauthorizedAccessException)
+            {
+                _statsWritable = false;
+                ShowInfo(InfoBarSeverity.Warning, $"The convert stats could not be read, so nothing is counted until the app restarts: {ex.Message}");
+                return;
+            }
+        }
+        SaveStats();
+    }
+
+    private void SaveStats()
+    {
+        if (_statsWritable) QueueWrite(StatsPath, _stats.ToJson(), "convert stats");
+    }
+
+    private void RecordStats(ConvertItem item)
+    {
+        _stats.Add(item.Status, item.Name, item.InputSize, item.OutputSize, item.OutputPath is not null, item.OriginalDeleted, DateTime.UtcNow - item.StartedUtc);
+        SaveStats();
+    }
+
+    private async void Stats_Click(object sender, RoutedEventArgs e)
+    {
+        var s = _stats;
+        var since = s.SinceUtc.ToLocalTime();
+        var days = (int)(DateTime.Now - since).TotalDays;
+        string Size(long bytes) => PresetConverter.FormatSize(bytes);
+        string Files(int n) => $"{n:N0} file{(n == 1 ? "" : "s")}";
+        static string Time(TimeSpan t) => t.TotalHours >= 1 ? $"{(int)t.TotalHours:N0}h {t.Minutes}m" : $"{t.Minutes}m {t.Seconds}s";
+
+        var rows = new List<(string Label, string Value)>
+        {
+            ("Counting since", $"{since:D} ({(days == 0 ? "today" : $"{days:N0} day{(days == 1 ? "" : "s")} ago")})"),
+            ("Files converted", s.Converted.ToString("N0")),
+            ("Space saved", s.InputBytes == 0 ? "None yet"
+                : s.SavedBytes >= 0 ? $"{Size(s.SavedBytes)} ({100.0 * s.SavedBytes / s.InputBytes:0.#}% smaller)"
+                : $"None: outputs are {Size(-s.SavedBytes)} larger"),
+            ("Originals, then outputs", $"{Size(s.InputBytes)} → {Size(s.OutputBytes)}"),
+            ("Average saved per file", s.Converted == 0 ? "None yet" : Size(Math.Max(0, s.SavedBytes / s.Converted))),
+            ("Biggest saving", s.BiggestSavingName is { } name ? $"{Size(s.BiggestSavingBytes)}, {name}" : "None yet"),
+            ("Freed by deleting originals", $"{Size(s.FreedBytes)} from {Files(s.OriginalsDeleted)}"),
+            ("Outputs discarded as larger", Files(s.Discarded)),
+            ("Skipped as HEVC", Files(s.Skipped)),
+            ("Failed attempts", Files(s.Failed)),
+            ("Time encoding", s.Converted + s.Discarded + s.Failed == 0 ? "None yet"
+                : $"{Time(s.EncodeTime)} ({Time(s.EncodeTime / (s.Converted + s.Discarded + s.Failed))} per file)"),
+            ("Last conversion", s.LastConvertedUtc is { } last ? last.ToLocalTime().ToString("f") : "None yet"),
+            ("Files in history", $"{_history.Count:N0}: {_history.CountOf(HistoryOutcome.Converted):N0} converted, "
+                + $"{_history.CountOf(HistoryOutcome.Discarded):N0} discarded, {_history.CountOf(HistoryOutcome.Skipped):N0} skipped, "
+                + $"{_history.CountOf(HistoryOutcome.Output):N0} outputs"),
+            ("Folders in history", _history.Folders.Count.ToString("N0")),
+        };
+
+        var grid = new Grid { ColumnSpacing = 24, RowSpacing = 8 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        foreach (var (label, value) in rows)
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var l = new TextBlock { Text = label, Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] };
+            var v = new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
+            Grid.SetRow(l, grid.RowDefinitions.Count - 1);
+            Grid.SetRow(v, grid.RowDefinitions.Count - 1);
+            Grid.SetColumn(v, 1);
+            grid.Children.Add(l);
+            grid.Children.Add(v);
+        }
+        var note = new TextBlock
+        {
+            Text = "Space saved compares each kept output with its original, whether or not the original was deleted. "
+                + "Cancelled files are not counted. Clearing the history does not reset these totals, only the history counts.",
+            TextWrapping = TextWrapping.Wrap,
+            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+        };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Convert stats",
+            Content = new ScrollViewer { Content = new StackPanel { Spacing = 16, Children = { grid, note } } },
+            PrimaryButtonText = "Reset...",
+            CloseButtonText = "Close",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        if (!await ConfirmAsync("Reset the convert stats?",
+                "Sets every total to zero and starts counting again from now. Converted files and the history are not affected.", "Reset"))
+            return;
+        _stats = new ConvertStats();
+        SaveStats();
+        ShowInfo(InfoBarSeverity.Success, "Convert stats reset.");
     }
 
     // FILTER
@@ -1038,6 +1161,7 @@ public sealed partial class ConverterPage : Page
                 try { await converting; }
                 // The status flips before the result fields are filled in, so save again once the file is fully done.
                 finally { UpdateSummary(); SessionChanged(); }
+                RecordStats(item);
                 await RecordAsync(item);
                 OverallProgress.Value = (double)++done / pending.Count;
             }
@@ -1068,6 +1192,9 @@ public sealed partial class ConverterPage : Page
     /// <summary>Gives anyone at the machine a minute to stop the shutdown, then asks Windows to shut down.</summary>
     private async Task ShutdownAfterCountdownAsync()
     {
+        // Only one dialog can be open at a time, so one left open during the run (Stats, Options) would make ShowAsync throw.
+        foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(XamlRoot))
+            if (popup.Child is ContentDialog open) open.Hide();
         var remaining = ShutdownCountdownSeconds;
         var text = new TextBlock { TextWrapping = TextWrapping.Wrap };
         void Update() => text.Text = $"The conversion queue has finished. Windows will shut down in {remaining} seconds.";

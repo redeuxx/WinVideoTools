@@ -268,6 +268,13 @@
                                         <FontIcon Glyph="&#xE8C8;" />
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem Text="Delete permanently..." Tag="{x:Bind}" Click="DeleteItem_Click"
+                                                ToolTipService.ToolTip="Permanently delete this file, original and any converted output, and take it off the list">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE74D;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
                             </MenuFlyout>
                         </Grid.ContextFlyout>
                         <Grid.ColumnDefinitions>
@@ -303,7 +310,7 @@
         </ListView>
         </Grid>
 
-        <!-- Remove selected keeps its place while hidden, so showing it never resizes the list under the pointer. -->
+        <!-- Remove and Delete selected keep their place while hidden, so showing them never resizes the list under the pointer. -->
         <Grid Grid.Row="7" RowSpacing="4">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -314,7 +321,12 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="ffmpeg command and log for selected file" VerticalAlignment="Bottom" />
-            <Button x:Name="RemoveButton" Grid.Column="1" Content="Remove selected" Click="Remove_Click" IsEnabled="False" Opacity="0" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <Button x:Name="RemoveButton" Content="Remove selected" Click="Remove_Click" IsEnabled="False" Opacity="0"
+                        ToolTipService.ToolTip="Take the selected files off the list. Nothing is deleted from disk." />
+                <Button x:Name="DeleteSelectedButton" Content="Delete selected..." Click="DeleteSelected_Click" IsEnabled="False" Opacity="0"
+                        ToolTipService.ToolTip="Permanently delete the selected files, original and any converted output, and take them off the list" />
+            </StackPanel>
             <TextBox x:Name="DetailsBox" Grid.Row="1" Grid.ColumnSpan="2" AutomationProperties.Name="ffmpeg command and log for selected file"
                      IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" Height="140" FontFamily="Consolas"
                      ScrollViewer.VerticalScrollBarVisibility="Auto" />

@@ -475,8 +475,58 @@ public sealed partial class ConverterPage : Page
 
     private void Remove_Click(object sender, RoutedEventArgs e)
     {
-        foreach (var item in Queue.SelectedItems.OfType<ConvertItem>().ToList()) _items.Remove(item);
+        // A running queue skips rows no longer in the list, but the one converting now stays until it finishes or is cancelled.
+        var selected = Queue.SelectedItems.OfType<ConvertItem>().ToList();
+        foreach (var item in selected.Where(i => !i.IsConverting)) _items.Remove(item);
         UpdateSummary();
+        if (selected.Any(i => i.IsConverting))
+            ShowInfo(InfoBarSeverity.Informational, "The file being converted stays in the list. Cancel the conversion to stop it.");
+    }
+
+    private async void DeleteItem_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is ConvertItem item) await DeleteFilesAsync([item]);
+    }
+
+    private async void DeleteSelected_Click(object sender, RoutedEventArgs e) =>
+        await DeleteFilesAsync(Queue.SelectedItems.OfType<ConvertItem>().ToList());
+
+    // Deletes every file a row has on disk, original and output, then drops the rows whose files are all gone.
+    // Works while a queue runs, which skips rows no longer in the list; the file ffmpeg is converting is never touched.
+    private async Task DeleteFilesAsync(List<ConvertItem> items)
+    {
+        if (items.Count == 0) return;
+        if (_adding)
+        {
+            ShowInfo(InfoBarSeverity.Warning, "Files cannot be deleted while files are being added.");
+            return;
+        }
+        var converting = items.RemoveAll(i => i.IsConverting);
+        if (items.Count == 0)
+        {
+            ShowInfo(InfoBarSeverity.Warning, "The file being converted cannot be deleted. Cancel the conversion first.");
+            return;
+        }
+
+        static IEnumerable<string> FilesOf(ConvertItem i) =>
+            new[] { i.HasOriginal ? i.Path : null, i.OutputPath }.OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase);
+        var outputs = items.Count(i => i.OutputPath is { } o && !string.Equals(o, i.Path, StringComparison.OrdinalIgnoreCase));
+        if (!await FileActions.ConfirmAsync(XamlRoot, FileAction.Delete, items.Sum(i => FilesOf(i).Count()), null,
+                outputs == 0 ? null : $"Includes {outputs} converted output{(outputs == 1 ? "" : "s")}.",
+                converting == 0 ? null : "The file being converted is left alone."))
+            return;
+
+        // The queue may have started one of these while the dialog was open.
+        // ponytail: a file the queue starts during the delete itself just fails to convert or to delete; nothing is lost.
+        items.RemoveAll(i => i.IsConverting);
+        var paths = items.SelectMany(FilesOf).ToList();
+        var (done, errors) = await FileActions.ApplyAsync(FileAction.Delete, paths, null);
+        foreach (var item in items.Where(i => FilesOf(i).All(done.Contains))) _items.Remove(item);
+        SetBusy(_cts is not null);
+        UpdateSummary();
+
+        var (severity, message) = FileActions.Describe(FileAction.Delete, done.Count, errors);
+        ShowInfo(severity, message);
     }
 
     private void Clear_Click(object sender, RoutedEventArgs e)
@@ -1143,7 +1193,12 @@ public sealed partial class ConverterPage : Page
                     await resume.Task.WaitAsync(ct);
                     Info.IsOpen = false;
                 }
-                if (!_items.Contains(item)) continue;
+                if (!_items.Contains(item))
+                {
+                    // Removed or deleted mid-run; counted so the bar still reaches the end.
+                    OverallProgress.Value = (double)++done / pending.Count;
+                    continue;
+                }
                 // Another list or session may have processed this file since it was queued.
                 var now = await Task.Run(() => ConvertHistory.Stat(new FileInfo(item.Path)));
                 if (_history.IsProcessed(item.Path, now, skipHevc, skipHevcUpTo1080p) && _history.Find(item.Path) is { } known)
@@ -1387,8 +1442,8 @@ public sealed partial class ConverterPage : Page
         FilesButton.IsEnabled = !busy && !_adding;
         OutputBox.IsEnabled = BrowseOutputButton.IsEnabled = !busy && SameFolderBox.IsChecked != true;
         // Hidden by opacity, not collapsed, so it keeps its place in the toolbar; disabled, it takes no clicks or focus.
-        RemoveButton.Opacity = Queue.SelectedItems.Count > 0 ? 1 : 0;
-        RemoveButton.IsEnabled = !busy && !_adding && Queue.SelectedItems.Count > 0;
+        RemoveButton.Opacity = DeleteSelectedButton.Opacity = Queue.SelectedItems.Count > 0 ? 1 : 0;
+        RemoveButton.IsEnabled = DeleteSelectedButton.IsEnabled = !_adding && Queue.SelectedItems.Count > 0;
         // The Files dropdown is off while busy or adding, so these only track whether there is anything to act on.
         ClearItem.IsEnabled = _items.Count > 0;
         RescanItem.IsEnabled = _folders.Count > 0 || _history.Folders.Count > 0;

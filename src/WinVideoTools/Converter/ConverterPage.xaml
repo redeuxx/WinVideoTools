@@ -184,6 +184,8 @@
                         </MenuFlyout>
                     </SplitButton.Flyout>
                 </SplitButton>
+                <Button x:Name="GoToCurrentButton" Content="Go to current" Click="GoToCurrent_Click" Visibility="Collapsed"
+                        ToolTipService.ToolTip="Scroll the list to the file being converted now" />
                 <CheckBox x:Name="AutoScrollBox" Content="Auto-scroll" VerticalAlignment="Center"
                           Checked="Setting_Changed" Unchecked="Setting_Changed"
                           ToolTipService.ToolTip="Scroll the list to each file as it starts converting" />

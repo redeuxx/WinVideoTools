@@ -138,6 +138,14 @@ public sealed partial class ConverterPage : Page
         };
     }
 
+    private void GoToCurrent_Click(object sender, RoutedEventArgs e)
+    {
+        // Between files, or while paused, nothing is converting.
+        if (_items.FirstOrDefault(i => i.IsConverting) is not { } item) return;
+        if (_view.Contains(item)) Queue.ScrollIntoView(item);
+        else ShowInfo(InfoBarSeverity.Informational, "The file being converted is hidden by the status filter. Set it to All to see it.");
+    }
+
     private void StopAutoScroll()
     {
         if (_cts is not null && AutoScrollBox.IsChecked == true) AutoScrollBox.IsChecked = false;
@@ -1447,7 +1455,7 @@ public sealed partial class ConverterPage : Page
         var moveFocus = (busy ? ConvertButton.FocusState : RunButton.FocusState) != FocusState.Unfocused;
         ConvertButton.Visibility = busy ? Visibility.Collapsed : Visibility.Visible;
         ConvertButton.IsEnabled = !_adding && hasPreset && _items.Count > 0;
-        RunButton.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        RunButton.Visibility = GoToCurrentButton.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         RunButton.Content = _resume is null ? "Pause" : "Resume";
         if (moveFocus) (busy ? (Control)RunButton : ConvertButton).Focus(FocusState.Programmatic);
         PresetBox.IsEnabled = ImportButton.IsEnabled = !busy;

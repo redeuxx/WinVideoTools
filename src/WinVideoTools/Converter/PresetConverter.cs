@@ -94,11 +94,21 @@ public static partial class PresetConverter
         var folder = string.IsNullOrWhiteSpace(outputFolder) ? Path.GetDirectoryName(source)! : outputFolder;
         var name = Path.GetFileNameWithoutExtension(source);
         var ext = Container(p).Extension;
-        var dest = Path.Combine(folder, name + ext);
+        var dest = Path.Combine(folder, Clip(name, MaxFileName - ext.Length) + ext);
         for (var n = 2; File.Exists(dest) || Directory.Exists(dest); n++)
-            dest = Path.Combine(folder, $"{name} ({n}){ext}");
+            dest = Path.Combine(folder, Clip(name, MaxFileName - $" ({n}){ext}".Length) + $" ({n}){ext}");
         return dest;
     }
+
+    /// <summary>Temporary name ffmpeg writes to: the output's name plus .partial, shortened to fit if need be.</summary>
+    public static string PartialPathFor(string output) =>
+        Path.Combine(Path.GetDirectoryName(output)!, Clip(Path.GetFileName(output), MaxFileName - ".partial".Length) + ".partial");
+
+    // Windows file systems cap each path component at 255 UTF-16 units; longer names fail with "Invalid argument".
+    private const int MaxFileName = 255;
+
+    private static string Clip(string s, int max) =>
+        s.Length <= max ? s : s[..(char.IsHighSurrogate(s[max - 1]) ? max - 1 : max)];
 
     // VIDEO ENCODERS
 
@@ -552,7 +562,7 @@ public static partial class PresetConverter
         var src = await ProbeAsync(ffmpegPath, input, ct).ConfigureAwait(false);
         // ffmpeg writes under a temporary name (BuildArgs passes -f, so the extension does not matter) that becomes
         // the output only once it is verified complete. If the app dies mid-run, the leftover is plainly unfinished.
-        var partial = output + ".partial";
+        var partial = PartialPathFor(output);
         var (args, notes) = BuildArgs(preset, src, input, partial);
         onCommand?.Invoke(string.Join(' ', args.Select(x => x.Contains(' ') ? $"\"{x}\"" : x)));
         if (File.Exists(output)) throw new IOException($"{output} already exists.");

@@ -253,6 +253,15 @@ var r = await PresetConverter.ConvertAsync(ffmpeg, x264, P("-odd name ü.mkv"), 
 var outInfo = r.Success ? await PresetConverter.ProbeAsync(ffmpeg, outPath, CancellationToken.None) : null;
 Check("x264 conversion succeeds", r.Success, r.Summary + Environment.NewLine + r.Log);
 Check("success renames the temporary file", File.Exists(outPath) && !File.Exists(outPath + ".partial"));
+
+var longName = new string('x', 247) + ".mp4";
+var longOut = PresetConverter.OutputPathFor(P(longName), null, x264);
+Check("long output name keeps the full stem", Path.GetFileName(longOut) == new string('x', 247) + ".mkv", longOut);
+Check("long partial name fits 255", Path.GetFileName(PresetConverter.PartialPathFor(longOut)) is { Length: 255 } pn && pn.EndsWith(".partial"));
+Check("short partial name is output plus .partial", PresetConverter.PartialPathFor(outPath) == outPath + ".partial");
+File.WriteAllText(P(new string('y', 251) + ".mkv"), "");
+var numbered = Path.GetFileName(PresetConverter.OutputPathFor(P(new string('y', 251) + ".ts"), null, x264));
+Check("numbered output name fits 255", numbered.Length == 255 && numbered.EndsWith(" (2).mkv"), numbered);
 Check("output has h264 + english aac only", outInfo is not null
     && outInfo.Streams.Count(s => s.Kind == "Audio") == 1 && outInfo.Streams.Any(s => s.Kind == "Audio" && s.Codec == "aac" && s.Language == "eng")
     && outInfo.Streams.Any(s => s.Kind == "Video" && s.Codec == "h264"), string.Join(", ", outInfo?.Streams.Select(s => $"{s.Kind}:{s.Codec}:{s.Language}") ?? []));

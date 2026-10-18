@@ -1066,6 +1066,14 @@ public sealed partial class ConverterPage : Page
         if (e.OriginalSource is ListViewItem { Content: ConvertItem item }) DetailsBox.Text = item.Details;
     }
 
+    // Only the checkbox ticks a row. Clicking the row focuses it instead, so a double-click to open does not flicker the tick.
+    private void Row_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(null).Properties.IsLeftButtonPressed) return;
+        e.Handled = true;
+        (Queue.ContainerFromItem((sender as FrameworkElement)?.DataContext) as ListViewItem)?.Focus(FocusState.Pointer);
+    }
+
     // OPEN
 
     // Double-click opens the result when there is one, otherwise the source.

@@ -54,11 +54,11 @@
         </StackPanel>
 
         <ListView x:Name="Results" Grid.Row="4" SelectionMode="Multiple" SelectionChanged="Results_SelectionChanged"
-                  DoubleTapped="Results_DoubleTapped"
+                  DoubleTapped="Results_DoubleTapped" GotFocus="Results_GotFocus"
                   BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="4">
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="local:VideoItem">
-                    <Grid ColumnSpacing="12" Padding="0,6" Background="Transparent">
+                    <Grid ColumnSpacing="12" Padding="0,6" Background="Transparent" PointerPressed="Row_PointerPressed">
                         <Grid.ContextFlyout>
                             <MenuFlyout>
                                 <MenuFlyoutItem Text="Open" Tag="{x:Bind Path}" Click="Open_Click">

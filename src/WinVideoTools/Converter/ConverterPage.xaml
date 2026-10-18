@@ -233,7 +233,7 @@
         <ListView x:Name="Queue" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="Queue_SelectionChanged" GotFocus="Queue_GotFocus" DoubleTapped="Queue_DoubleTapped">
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="local:ConvertItem">
-                    <Grid ColumnSpacing="12" Padding="0,6" Background="Transparent">
+                    <Grid ColumnSpacing="12" Padding="0,6" Background="Transparent" PointerPressed="Row_PointerPressed">
                         <Grid.ContextFlyout>
                             <MenuFlyout>
                                 <MenuFlyoutItem Text="Open original" Tag="{x:Bind Path}" IsEnabled="{x:Bind HasOriginal, Mode=OneWay}" Click="Open_Click">

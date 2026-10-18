@@ -235,10 +235,27 @@ public sealed partial class VideoVerifierPage : Page
         var shown = e.AddedItems.OfType<VideoItem>().LastOrDefault()
                     ?? (Results.SelectedItems.Count == 1 ? Results.SelectedItems[0] as VideoItem : null);
         if (shown is not null)
-            DetailsBox.Text = string.IsNullOrEmpty(shown.Details) ? shown.Summary : $"{shown.Summary}{Environment.NewLine}{Environment.NewLine}{shown.Details}";
+            ShowDetails(shown);
         else if (Results.SelectedItems.Count == 0)
             DetailsBox.Text = "";
         UpdateSelection();
+    }
+
+    private void ShowDetails(VideoItem item) =>
+        DetailsBox.Text = string.IsNullOrEmpty(item.Details) ? item.Summary : $"{item.Summary}{Environment.NewLine}{Environment.NewLine}{item.Details}";
+
+    // Arrow keys and row clicks move focus without ticking rows, so the details follow the focused row too.
+    private void Results_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is ListViewItem { Content: VideoItem item }) ShowDetails(item);
+    }
+
+    // Only the checkbox ticks a row. Clicking the row focuses it instead, so a double-click to open does not flicker the tick.
+    private void Row_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(null).Properties.IsLeftButtonPressed) return;
+        e.Handled = true;
+        (Results.ContainerFromItem((sender as FrameworkElement)?.DataContext) as ListViewItem)?.Focus(FocusState.Pointer);
     }
 
     private static bool IsInvalid(VideoItem i) => i.Status is VideoStatus.Invalid or VideoStatus.Failed;

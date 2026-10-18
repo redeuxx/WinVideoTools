@@ -610,6 +610,13 @@ public sealed partial class ConverterPage : Page
     private async void RestoreOnStartup(Settings settings)
     {
         bool applied = false, recovering = File.Exists(RecoveryPath);
+        // A big list or a slow drive can take a while to read, so say so; the progress bar runs until _restored is set.
+        object? loading = null;
+        if (recovering || settings.Autosave && settings.SessionPath is not null)
+        {
+            ShowInfo(InfoBarSeverity.Informational, "Loading the previous session...");
+            loading = Info.Tag;
+        }
         try
         {
             var session = recovering ? await ReadSessionAsync(RecoveryPath) : null;
@@ -635,6 +642,8 @@ public sealed partial class ConverterPage : Page
         }
         finally
         {
+            // Still showing when nothing was applied, for example when files were added while it read.
+            if (loading is not null && Info.Tag == loading) Info.IsOpen = false;
             // Autosave never stays on without a file to write to.
             if (AutosaveItem.IsChecked && _sessionPath is null)
             {
@@ -645,6 +654,7 @@ public sealed partial class ConverterPage : Page
             SaveSettings();
             // Anything changed while the file was read is saved now.
             _restored = true;
+            SetBusy(_cts is not null);
             SessionChanged();
             // A reopened session matches its file, so only real changes rewrite it. A recovered list can be newer than
             // the file (its last save may have failed), so it stays marked changed and Autosave writes it out.
@@ -1457,8 +1467,9 @@ public sealed partial class ConverterPage : Page
         RescanItem.IsEnabled = _folders.Count > 0 || _history.Folders.Count > 0;
         SaveSessionItem.IsEnabled = !_adding && _items.Count > 0;
         LoadSessionItem.IsEnabled = !busy && !_adding;
-        OverallProgress.Visibility = busy || _adding ? Visibility.Visible : Visibility.Collapsed;
-        OverallProgress.IsIndeterminate = _adding && !busy;
+        // Also runs while startup reads the previous session.
+        OverallProgress.Visibility = busy || _adding || !_restored ? Visibility.Visible : Visibility.Collapsed;
+        OverallProgress.IsIndeterminate = (_adding || !_restored) && !busy;
     }
 
     private void UpdateSummary()

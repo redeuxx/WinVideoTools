@@ -96,7 +96,10 @@ public sealed partial class ConverterPage : Page
             _autosave.Stop();
             await SaveSessionNowAsync();
         };
-        App.MainWindow!.AppWindow.Closing += (_, _) => OnAppClosing();
+        MainWindow.Exiting += OnAppClosing;
+        // Session and history writes are not listed: closing already waits for them.
+        MainWindow.TrackActivity(() => _cts is not null ? (_resume is null ? "Convert is converting videos." : "Convert has a paused queue.")
+            : _adding ? "Convert is finding videos to add." : null);
         var settings = LoadSettings();
         LoadPresets(settings.Preset);
         ApplyOptions(new ConvertOptions(null, settings.OutputFolder, settings.SameFolder ?? settings.OutputFolder.Length == 0,
@@ -329,7 +332,7 @@ public sealed partial class ConverterPage : Page
         if (await picker.PickSaveFileAsync() is not { } result) return;
         try
         {
-            await File.WriteAllTextAsync(result.Path, preset.ToFileJson());
+            await MainWindow.Track("Convert is saving a preset.", File.WriteAllTextAsync(result.Path, preset.ToFileJson()));
             ShowInfo(InfoBarSeverity.Success, $"Saved {result.Path}");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -528,7 +531,7 @@ public sealed partial class ConverterPage : Page
         // ponytail: a file the queue starts during the delete itself just fails to convert or to delete; nothing is lost.
         items.RemoveAll(i => i.IsConverting);
         var paths = items.SelectMany(FilesOf).ToList();
-        var (done, errors) = await FileActions.ApplyAsync(FileAction.Delete, paths, null);
+        var (done, errors) = await MainWindow.Track("Convert is deleting files.", FileActions.ApplyAsync(FileAction.Delete, paths, null));
         foreach (var item in items.Where(i => FilesOf(i).All(done.Contains))) _items.Remove(item);
         SetBusy(_cts is not null);
         UpdateSummary();
@@ -791,13 +794,16 @@ public sealed partial class ConverterPage : Page
     // If that save failed or is still running, the recovery file stays and the list comes back next start.
     private void OnAppClosing()
     {
+        // Kills ffmpeg, which would otherwise outlive the app and keep writing its output.
+        _cts?.Cancel();
         _autosave.Stop();
         // Waits on _saving, not the async method: its continuation needs this (blocked) UI thread. It sets _saving before yielding.
         if (AutosaveItem.IsChecked && _sessionFileDirty && _sessionPath is not null) _ = SaveSessionNowAsync();
         _historySaving.Wait(TimeSpan.FromSeconds(5));
         try
         {
-            if (_saving.Wait(TimeSpan.FromSeconds(5)) && !_lastSaveFailed) File.Delete(RecoveryPath);
+            // Before startup has restored the list, the recovery file is the only copy of it.
+            if (_saving.Wait(TimeSpan.FromSeconds(5)) && _restored && !_lastSaveFailed) File.Delete(RecoveryPath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or AggregateException)
         {
@@ -915,7 +921,7 @@ public sealed partial class ConverterPage : Page
         var json = _history.ToJson();
         try
         {
-            await Task.Run(() => ConvertHistory.WriteJson(result.Path, json));
+            await MainWindow.Track("Convert is saving the history.", Task.Run(() => ConvertHistory.WriteJson(result.Path, json)));
             ShowInfo(InfoBarSeverity.Success, $"Saved {_history.Count:N0} files and {_history.Folders.Count:N0} folders to {result.Path}. "
                 + "Importing it merges it into that history rather than replacing it, and its entries only match files at the same full paths.");
         }
@@ -1273,6 +1279,8 @@ public sealed partial class ConverterPage : Page
     /// <summary>Gives anyone at the machine a minute to stop the shutdown, then asks Windows to shut down.</summary>
     private async Task ShutdownAfterCountdownAsync()
     {
+        // The queue can finish while the exit question is open; exiting then means no shutdown.
+        await MainWindow.ExitPromptClosed;
         // Only one dialog can be open at a time, so one left open during the run (Stats, Options) would make ShowAsync throw.
         foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(XamlRoot))
             if (popup.Child is ContentDialog open) open.Hide();
@@ -1299,6 +1307,12 @@ public sealed partial class ConverterPage : Page
         };
         timer.Start();
         var result = await dialog.ShowAsync();
+        // Closing the app while another tool is busy hides this to ask first; keeping the app running brings it back, still counting.
+        while (result == ContentDialogResult.None && !timedOut && !MainWindow.ExitPromptClosed.IsCompleted)
+        {
+            await MainWindow.ExitPromptClosed;
+            if (!timedOut) result = await dialog.ShowAsync();
+        }
         timer.Stop();
 
         if (!timedOut && result != ContentDialogResult.Primary)

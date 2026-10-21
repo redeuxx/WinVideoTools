@@ -21,6 +21,10 @@ public sealed partial class VideoVerifierPage : Page
         // ffmpeg already decodes multithreaded, so a few files at once saturates most CPUs.
         ParallelBox.Value = Math.Clamp(Environment.ProcessorCount / 4, 1, 4);
         FileDrop.Attach(this, "Scan this folder", () => !_busy, OnDropAsync);
+        MainWindow.TrackActivity(() => _cts is not null ? "Video Verifier is checking videos."
+            : _busy ? "Video Verifier is moving or deleting files." : null);
+        // Kills the ffmpeg processes, which would otherwise outlive the app.
+        MainWindow.Exiting += () => _cts?.Cancel();
     }
 
     // One folder is scanned at a time; a dropped file stands for the folder it is in.
@@ -198,7 +202,7 @@ public sealed partial class VideoVerifierPage : Page
             sb.AppendJoin(',', Csv(i.StatusText), Csv(i.Path), Csv(i.Summary), Csv(i.Details)).Append("\r\n");
         try
         {
-            await File.WriteAllTextAsync(result.Path, sb.ToString(), Encoding.UTF8);
+            await MainWindow.Track("Video Verifier is saving the results.", File.WriteAllTextAsync(result.Path, sb.ToString(), Encoding.UTF8));
             ShowInfo(InfoBarSeverity.Success, $"Saved {result.Path}");
         }
         catch (Exception ex)

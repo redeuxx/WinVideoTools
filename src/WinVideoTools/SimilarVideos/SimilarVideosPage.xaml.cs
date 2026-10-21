@@ -33,6 +33,15 @@ public sealed partial class SimilarVideosPage : Page
         DriftBox.Value = VideoFingerprint.DefaultMaxDrift;
         DriftBox.Maximum = VideoFingerprint.MaxMaxDrift;
         FileDrop.Attach(this, "Add to folders", () => !_busy, OnDropAsync);
+        // A preview capture only reads, so it is not worth asking about, but its ffmpeg is still stopped.
+        MainWindow.TrackActivity(() => _cts is not null ? "Similar Videos is scanning for duplicates."
+            : _busy ? "Similar Videos is moving or deleting files." : null);
+        // Kills the ffmpeg processes, which would otherwise outlive the app.
+        MainWindow.Exiting += () =>
+        {
+            _cts?.Cancel();
+            _previewCts?.Cancel();
+        };
     }
 
     // A dropped file stands for the folder it is in.

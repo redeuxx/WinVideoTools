@@ -8,6 +8,10 @@ public static class FfmpegPrompt
 {
     private const string NotInstalled = "WinVideoTools uses ffmpeg to read and convert videos, and it is not installed.";
 
+    private static bool _downloading;
+
+    static FfmpegPrompt() => MainWindow.TrackActivity(() => _downloading ? "ffmpeg is downloading." : null);
+
     /// <summary>Startup check: proves ffmpeg runs, and offers a fresh download when it does not.</summary>
     public static async Task StartupCheckAsync(XamlRoot root)
     {
@@ -23,6 +27,8 @@ public static class FfmpegPrompt
 
     private static async Task<bool> AskAndDownloadAsync(XamlRoot root, string reason)
     {
+        // The startup check gets here without a click, so the exit question may be open.
+        await MainWindow.ExitPromptClosed;
         var ask = new ContentDialog
         {
             XamlRoot = root,
@@ -51,7 +57,18 @@ public static class FfmpegPrompt
             CloseButtonText = "Cancel",
         };
         progress.CloseButtonClick += (_, _) => cts.Cancel();
-        var shown = progress.ShowAsync();
+        _downloading = true;
+        var shown = ShowProgressAsync();
+
+        // Closing the app hides this dialog to ask first; keeping the app running brings it back.
+        async Task ShowProgressAsync()
+        {
+            while (_downloading && !cts.IsCancellationRequested)
+            {
+                await progress.ShowAsync();
+                await MainWindow.ExitPromptClosed;
+            }
+        }
 
         string? error = null;
         try
@@ -72,6 +89,7 @@ public static class FfmpegPrompt
         }
         finally
         {
+            _downloading = false;
             progress.Hide();
             await shown;
         }
@@ -84,7 +102,10 @@ public static class FfmpegPrompt
         return Ffmpeg.IsInstalled;
     }
 
-    private static async Task ShowErrorAsync(XamlRoot root, string message) =>
+    // Shown when a download or check ends, which can be while the exit question is open.
+    private static async Task ShowErrorAsync(XamlRoot root, string message)
+    {
+        await MainWindow.ExitPromptClosed;
         await new ContentDialog
         {
             XamlRoot = root,
@@ -92,4 +113,5 @@ public static class FfmpegPrompt
             Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
             CloseButtonText = "OK",
         }.ShowAsync();
+    }
 }

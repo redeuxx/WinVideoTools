@@ -86,13 +86,15 @@
                         <ColumnDefinition Width="100" />
                         <ColumnDefinition Width="130" />
                         <ColumnDefinition Width="90" />
-                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="80" />
+                        <ColumnDefinition Width="80" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="1" Text="File" Style="{StaticResource CaptionTextBlockStyle}" />
                     <TextBlock Grid.Column="2" Text="Dimensions" Style="{StaticResource CaptionTextBlockStyle}" />
                     <TextBlock Grid.Column="3" Text="Format" Style="{StaticResource CaptionTextBlockStyle}" />
                     <TextBlock Grid.Column="4" Text="Bit rate" Style="{StaticResource CaptionTextBlockStyle}" />
-                    <TextBlock Grid.Column="5" Text="Length and size" Style="{StaticResource CaptionTextBlockStyle}" />
+                    <TextBlock Grid.Column="5" Text="Length" Style="{StaticResource CaptionTextBlockStyle}" />
+                    <TextBlock Grid.Column="6" Text="Size" Style="{StaticResource CaptionTextBlockStyle}" />
                 </Grid>
             </ListView.Header>
             <ListView.GroupStyle>
@@ -113,7 +115,8 @@
                             <ColumnDefinition Width="100" />
                             <ColumnDefinition Width="130" />
                             <ColumnDefinition Width="90" />
-                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="80" />
                         </Grid.ColumnDefinitions>
                         <Grid.ContextFlyout>
                             <MenuFlyout>
@@ -138,7 +141,9 @@
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{x:Bind Format}" />
                         <TextBlock Grid.Column="4" Text="{x:Bind Bitrate}" VerticalAlignment="Center"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="5" Text="{x:Bind Description}" VerticalAlignment="Center"
+                        <TextBlock Grid.Column="5" Text="{x:Bind Length}" VerticalAlignment="Center"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="6" Text="{x:Bind SizeText}" VerticalAlignment="Center"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </Grid>
                 </DataTemplate>

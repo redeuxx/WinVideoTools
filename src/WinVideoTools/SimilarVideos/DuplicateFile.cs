@@ -34,8 +34,10 @@ public sealed class DuplicateFile(string path, long size, VideoFingerprint finge
         : _fingerprint.Duration > 0 ? $"~{Size * 8 / _fingerprint.Duration / 1000:0} kb/s"
         : "";
 
-    // Not "Info": a template property sharing a name with a page element (the InfoBar) crashes the XAML compiler (WMC9999).
-    public string Description => $"{TimeSpan.FromSeconds(Math.Round(_fingerprint.Duration)):g}   {FormatSize(Size)}";
+    // A template property sharing a name with a page element (such as the InfoBar "Info") crashes the XAML compiler (WMC9999).
+    public string Length => $"{TimeSpan.FromSeconds(Math.Round(_fingerprint.Duration)):g}";
+
+    public string SizeText => FormatSize(Size);
 
     private static string FormatSize(long bytes) => bytes switch
     {

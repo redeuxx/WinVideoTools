@@ -131,7 +131,7 @@
                         </Grid.ContextFlyout>
                         <CheckBox IsChecked="{x:Bind IsSelected, Mode=TwoWay}" MinWidth="0"
                                   AutomationProperties.Name="{x:Bind Path}" />
-                        <TextBlock Grid.Column="1" Text="{x:Bind Path}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="{x:Bind Path}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Path}" />
                         <TextBlock Grid.Column="2" Text="{x:Bind Dimensions}" VerticalAlignment="Center"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <TextBlock Grid.Column="3" Text="{x:Bind Format}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"

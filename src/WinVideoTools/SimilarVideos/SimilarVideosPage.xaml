@@ -77,6 +77,8 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
         <ListView x:Name="Results" SelectionMode="Single" DoubleTapped="Results_DoubleTapped" SelectionChanged="Results_SelectionChanged"
+                  ScrollViewer.HorizontalScrollMode="Enabled" ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                  ContainerContentChanging="Results_ContainerContentChanging"
                   BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="4">
             <ListView.Header>
                 <Grid ColumnSpacing="12" Margin="16,8,12,4">
@@ -108,15 +110,12 @@
             </ListView.GroupStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="local:DuplicateFile">
+                    <!-- The check box and the grid of cells are the root's first two children; the page pins the box
+                         while the list scrolls sideways and clips the cells that slide under it. -->
                     <Grid ColumnSpacing="12" Background="Transparent">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="32" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="100" />
-                            <ColumnDefinition Width="130" />
-                            <ColumnDefinition Width="90" />
-                            <ColumnDefinition Width="80" />
-                            <ColumnDefinition Width="80" />
                         </Grid.ColumnDefinitions>
                         <Grid.ContextFlyout>
                             <MenuFlyout>
@@ -134,17 +133,27 @@
                         </Grid.ContextFlyout>
                         <CheckBox IsChecked="{x:Bind IsSelected, Mode=TwoWay}" MinWidth="0"
                                   AutomationProperties.Name="{x:Bind Path}" />
-                        <TextBlock Grid.Column="1" Text="{x:Bind Path}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Path}" />
-                        <TextBlock Grid.Column="2" Text="{x:Bind Dimensions}" VerticalAlignment="Center"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="3" Text="{x:Bind Format}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{x:Bind Format}" />
-                        <TextBlock Grid.Column="4" Text="{x:Bind Bitrate}" VerticalAlignment="Center"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="5" Text="{x:Bind Length}" VerticalAlignment="Center"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="6" Text="{x:Bind SizeText}" VerticalAlignment="Center"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Grid Grid.Column="1" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="100" />
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="90" />
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="80" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{x:Bind Path}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Path}" />
+                            <TextBlock Grid.Column="1" Text="{x:Bind Dimensions}" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="2" Text="{x:Bind Format}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" ToolTipService.ToolTip="{x:Bind Format}" />
+                            <TextBlock Grid.Column="3" Text="{x:Bind Bitrate}" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="4" Text="{x:Bind Length}" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="5" Text="{x:Bind SizeText}" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </Grid>
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>

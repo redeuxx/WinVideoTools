@@ -5,7 +5,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Foundation;
 using Windows.Storage.Streams;
 
 namespace WinVideoTools.SimilarVideos;
@@ -42,6 +44,59 @@ public sealed partial class SimilarVideosPage : Page
             _cts?.Cancel();
             _previewCts?.Cancel();
         };
+        Results.Loaded += Results_Loaded;
+    }
+
+    // RESULTS WIDTH
+
+    // The fixed columns, their spacing and the row padding take about 610 px; the rest leaves room for the path.
+    // Narrower than this (the preview pane alone takes 400 px), the list scrolls sideways instead of squeezing columns out of view.
+    // ponytail: matched by hand to the column widths in the XAML; change both together.
+    private const double MinResultsWidth = 800;
+    // How far the results are scrolled sideways; each row's check box is shifted by this much to stay in view.
+    private double _scrolledRight;
+
+    private void Results_Loaded(object sender, RoutedEventArgs e)
+    {
+        // Once: the page is cached, so Loaded fires on every visit, but the template parts wired up here stay the same.
+        Results.Loaded -= Results_Loaded;
+        if (VisualTree.FindChild<ScrollViewer>(Results) is not { Content: FrameworkElement content } viewer) return;
+        content.Width = Math.Max(viewer.ActualWidth, MinResultsWidth);
+        viewer.SizeChanged += (_, args) => content.Width = Math.Max(args.NewSize.Width, MinResultsWidth);
+        // Selecting a row brings it into view. Rows are as wide as the content, so that would scroll back to the left edge;
+        // keeping the request inside the visible columns leaves the sideways position alone and still scrolls up and down.
+        content.BringIntoViewRequested += (_, args) =>
+        {
+            var left = args.TargetElement.TransformToVisual(viewer).TransformPoint(default).X;
+            var r = args.TargetRect;
+            args.TargetRect = new Rect(-left, r.Y, Math.Min(r.Width, viewer.ViewportWidth), r.Height);
+        };
+        // Fires repeatedly while scrolling, so the check boxes keep up with the drag.
+        viewer.ViewChanged += (_, _) =>
+        {
+            _scrolledRight = viewer.HorizontalOffset;
+            foreach (var row in Results.ItemsPanelRoot?.Children.OfType<ListViewItem>() ?? [])
+                if (row.ContentTemplateRoot is Grid root) PinCheckBox(root);
+        };
+    }
+
+    // Rows created or reused while scrolled sideways start out pinned too.
+    private void Results_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (!args.InRecycleQueue && args.ItemContainer.ContentTemplateRoot is Grid root) PinCheckBox(root);
+    }
+
+    // Moves the check box right by the sideways scroll so it stays at the left edge, and cuts off the cells that
+    // slide under it. A render transform, unlike a composition animation, moves where clicks land too.
+    private void PinCheckBox(Grid row)
+    {
+        if (row.Children.Count < 2 || row.Children[0] is not CheckBox box || row.Children[1] is not FrameworkElement cells) return;
+        var x = _scrolledRight;
+        if (box.RenderTransform is TranslateTransform shift) shift.X = x;
+        else box.RenderTransform = new TranslateTransform { X = x };
+        // The cells start one column gap right of the box, so hiding everything left of x in their own space keeps that gap.
+        // ponytail: oversized rect; only its left edge matters.
+        cells.Clip = x <= 0 ? null : new RectangleGeometry { Rect = new Rect(x, 0, 1e5, 1e5) };
     }
 
     // A dropped file stands for the folder it is in.

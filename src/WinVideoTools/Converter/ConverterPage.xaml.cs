@@ -137,7 +137,7 @@ public sealed partial class ConverterPage : Page
         // Touch and precision-touchpad panning go through direct manipulation, not wheel events.
         Queue.Loaded += (_, _) =>
         {
-            if (FindChild<ScrollViewer>(Queue) is { } viewer) viewer.DirectManipulationStarted += (_, _) => StopAutoScroll();
+            if (VisualTree.FindChild<ScrollViewer>(Queue) is { } viewer) viewer.DirectManipulationStarted += (_, _) => StopAutoScroll();
         };
     }
 
@@ -159,16 +159,6 @@ public sealed partial class ConverterPage : Page
         for (; d is not null; d = VisualTreeHelper.GetParent(d))
             if (d is ScrollBar) return true;
         return false;
-    }
-
-    private static T? FindChild<T>(DependencyObject parent) where T : DependencyObject
-    {
-        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, i);
-            if ((child as T ?? FindChild<T>(child)) is { } found) return found;
-        }
-        return null;
     }
 
     // Dropped folders are searched like Add folder, including subfolders.

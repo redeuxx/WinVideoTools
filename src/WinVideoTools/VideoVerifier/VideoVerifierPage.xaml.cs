@@ -9,6 +9,8 @@ namespace WinVideoTools.VideoVerifier;
 public sealed partial class VideoVerifierPage : Page
 {
     private readonly ObservableCollection<VideoItem> _items = [];
+    // What the list shows: _items in the same order, narrowed by the status filter.
+    private readonly ObservableCollection<VideoItem> _view = [];
     private CancellationTokenSource? _cts;
     private int _valid, _invalid, _done;
     private bool _busy;
@@ -17,7 +19,9 @@ public sealed partial class VideoVerifierPage : Page
     public VideoVerifierPage()
     {
         InitializeComponent();
-        Results.ItemsSource = _items;
+        Results.ItemsSource = _view;
+        FilterBox.ItemsSource = (string[])["All", "Valid", "Invalid", "Processing"];
+        FilterBox.SelectedIndex = 0;
         // ffmpeg already decodes multithreaded, so a few files at once saturates most CPUs.
         ParallelBox.Value = Math.Clamp(Environment.ProcessorCount / 4, 1, 4);
         FileDrop.Attach(this, "Scan this folder", () => !_busy, OnDropAsync);
@@ -84,6 +88,7 @@ public sealed partial class VideoVerifierPage : Page
 
         Info.IsOpen = false;
         _items.Clear();
+        SyncView();
         if (!refresh) DetailsBox.Text = "";
         _valid = _invalid = _done = 0;
         _scannedFolder = folder;
@@ -115,8 +120,10 @@ public sealed partial class VideoVerifierPage : Page
                     ? old
                     : new VideoItem(f.FullName, Path.GetRelativePath(folder, f.FullName), f.Length, f.LastWriteTimeUtc);
                 _items.Add(item);
-                if (selected.Contains(item.Path)) Results.SelectedItems.Add(item);
             }
+            SyncView();
+            // Only rows in the list can be selected, so files hidden by the filter lose their selection.
+            foreach (var item in _view.Where(i => selected.Contains(i.Path))) Results.SelectedItems.Add(item);
             _valid = _items.Count(i => i.IsValid);
             _invalid = _items.Count(IsInvalid);
             _done = _valid + _invalid;
@@ -161,6 +168,8 @@ public sealed partial class VideoVerifierPage : Page
         try
         {
             item.Status = VideoStatus.Checking;
+            if (AutoScrollBox.IsChecked == true && _view.Contains(item)) Results.ScrollIntoView(item);
+            UpdateSummary();
             var result = await VideoChecker.CheckAsync(
                 Ffmpeg.ExePath, item.Path, new Progress<double>(p => item.Progress = p), ct);
             item.Summary = result.Summary;
@@ -184,6 +193,7 @@ public sealed partial class VideoVerifierPage : Page
             gate.Release();
         }
         _done++;
+        SyncView();
         UpdateSummary();
     }
 
@@ -215,6 +225,7 @@ public sealed partial class VideoVerifierPage : Page
     {
         if (_busy) return;
         _items.Clear();
+        SyncView();
         _valid = _invalid = _done = 0;
         _scannedFolder = null;
         DetailsBox.Text = "";
@@ -273,7 +284,7 @@ public sealed partial class VideoVerifierPage : Page
     private void SelectWhere(Func<VideoItem, bool> select)
     {
         Results.SelectedItems.Clear();
-        foreach (var item in _items.Where(select)) Results.SelectedItems.Add(item);
+        foreach (var item in _view.Where(select)) Results.SelectedItems.Add(item);
     }
 
     private void UpdateSelection()
@@ -282,6 +293,32 @@ public sealed partial class VideoVerifierPage : Page
         SelectionText.Text = count == 0 ? "" : $"{count} selected";
         RecycleButton.IsEnabled = MoveButton.IsEnabled = DeleteButton.IsEnabled = !_busy && count > 0;
         SelectValidButton.IsEnabled = SelectInvalidButton.IsEnabled = ClearButton.IsEnabled = !_busy && _items.Count > 0;
+    }
+
+    // FILTER
+
+    private void FilterBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => SyncView();
+
+    /// <summary>
+    /// Brings _view in line with _items and the status filter by adding and removing rows rather than
+    /// rebuilding it, so a status change mid-scan does not reset scrolling or selection.
+    /// </summary>
+    private void SyncView()
+    {
+        Func<VideoItem, bool> show = (FilterBox.SelectedItem as string) switch
+        {
+            "Valid" => i => i.IsValid,
+            "Invalid" => IsInvalid,
+            "Processing" => i => i.Status is VideoStatus.Pending or VideoStatus.Checking,
+            _ => _ => true,
+        };
+        var want = _items.Where(show).ToList();
+        var keep = want.ToHashSet();
+        for (var i = _view.Count - 1; i >= 0; i--)
+            if (!keep.Contains(_view[i])) _view.RemoveAt(i);
+        // _view is now an in-order subset of want, so anything out of step at i is missing there.
+        for (var i = 0; i < want.Count; i++)
+            if (i >= _view.Count || _view[i] != want[i]) _view.Insert(i, want[i]);
     }
 
     // FILE ACTIONS
@@ -309,6 +346,7 @@ public sealed partial class VideoVerifierPage : Page
         SetBusy(true);
         var (done, errors) = await FileActions.ApplyAsync(action, selected.Select(i => i.Path).ToList(), target);
         foreach (var item in selected.Where(i => done.Contains(i.Path))) _items.Remove(item);
+        SyncView();
 
         _valid = _items.Count(i => i.IsValid);
         _invalid = _items.Count(IsInvalid);
@@ -375,7 +413,8 @@ public sealed partial class VideoVerifierPage : Page
     private void UpdateSummary()
     {
         OverallProgress.Value = _done;
-        SummaryText.Text = $"{_items.Count} files: {_valid} valid, {_invalid} invalid, {_items.Count - _done} not checked";
+        var checking = _items.Count(i => i.IsChecking);
+        SummaryText.Text = $"{_items.Count} files: {_valid} valid, {_invalid} invalid, {checking} processing, {_items.Count - _done - checking} not checked";
     }
 
     // Closes itself after 10 seconds unless a newer message has replaced it; errors stay until dismissed.

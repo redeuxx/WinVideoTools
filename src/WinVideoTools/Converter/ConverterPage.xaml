@@ -232,10 +232,11 @@
                 <TextBlock Grid.Column="4" Text="Result" Style="{StaticResource BodyStrongTextBlockStyle}" />
                 <TextBlock Grid.Column="5" Text="Decision" Style="{StaticResource BodyStrongTextBlockStyle}" />
             </Grid>
-        <ListView x:Name="Queue" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="Queue_SelectionChanged" GotFocus="Queue_GotFocus" DoubleTapped="Queue_DoubleTapped">
+        <ListView x:Name="Queue" Grid.Row="1" SelectionMode="Multiple" SelectionChanged="Queue_SelectionChanged" GotFocus="Queue_GotFocus" DoubleTapped="Queue_DoubleTapped"
+                  ItemContainerStyle="{StaticResource CheckOnlyListViewItemStyle}">
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="local:ConvertItem">
-                    <Grid ColumnSpacing="12" Padding="0,6" Background="Transparent" PointerPressed="Row_PointerPressed">
+                    <Grid ColumnSpacing="12" Padding="12,6" Background="Transparent" PointerPressed="Row_PointerPressed">
                         <Grid.ContextFlyout>
                             <MenuFlyout>
                                 <MenuFlyoutItem Text="Open original" Tag="{x:Bind Path}" IsEnabled="{x:Bind HasOriginal, Mode=OneWay}" Click="Open_Click">

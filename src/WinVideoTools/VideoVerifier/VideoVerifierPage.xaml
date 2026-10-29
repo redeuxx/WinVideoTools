@@ -30,6 +30,8 @@
 
         <app:WrapPanel Grid.Row="2" HorizontalSpacing="16">
             <CheckBox x:Name="RecurseBox" Content="Include subfolders" IsChecked="True" VerticalAlignment="Center" />
+            <CheckBox x:Name="AutoScrollBox" Content="Auto-scroll" IsChecked="True" VerticalAlignment="Center"
+                      ToolTipService.ToolTip="Scroll the list to each file as it starts being checked" />
             <NumberBox x:Name="ParallelBox" Header="Files at once" Minimum="1" Maximum="32" SpinButtonPlacementMode="Inline" Width="160" />
             <Button x:Name="ScanButton" Content="Scan" Style="{StaticResource AccentButtonStyle}" Click="Scan_Click" VerticalAlignment="Bottom" />
             <Button x:Name="RefreshButton" Click="Refresh_Click" IsEnabled="False" VerticalAlignment="Bottom" AutomationProperties.Name="Refresh"
@@ -49,16 +51,26 @@
 
         <StackPanel Grid.Row="3" Spacing="4">
             <InfoBar x:Name="Info" IsOpen="False" />
-            <TextBlock x:Name="SummaryText" />
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="SummaryText" VerticalAlignment="Center" TextWrapping="Wrap" />
+                <ComboBox x:Name="FilterBox" Grid.Column="1" MinWidth="140" AutomationProperties.Name="Show files with status"
+                          SelectionChanged="FilterBox_SelectionChanged"
+                          ToolTipService.ToolTip="Show only files with this status. Processing includes files not checked yet." />
+            </Grid>
             <ProgressBar x:Name="OverallProgress" Visibility="Collapsed" />
         </StackPanel>
 
         <ListView x:Name="Results" Grid.Row="4" SelectionMode="Multiple" SelectionChanged="Results_SelectionChanged"
                   DoubleTapped="Results_DoubleTapped" GotFocus="Results_GotFocus"
-                  BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="4">
+                  BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="4"
+                  ItemContainerStyle="{StaticResource CheckOnlyListViewItemStyle}">
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="local:VideoItem">
-                    <Grid ColumnSpacing="12" Padding="0,6" Background="Transparent" PointerPressed="Row_PointerPressed">
+                    <Grid ColumnSpacing="12" Padding="12,6" Background="Transparent" PointerPressed="Row_PointerPressed">
                         <Grid.ContextFlyout>
                             <MenuFlyout>
                                 <MenuFlyoutItem Text="Open" Tag="{x:Bind Path}" Click="Open_Click">

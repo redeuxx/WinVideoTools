@@ -13,7 +13,9 @@ public sealed partial class VideoVerifierPage : Page
     private readonly ObservableCollection<VideoItem> _view = [];
     private CancellationTokenSource? _cts;
     private int _valid, _invalid, _done;
-    private bool _busy;
+    // Moving or deleting files; a scan is running while _cts is set. Either can run while the other does.
+    private bool _acting;
+    private bool Busy => _cts is not null || _acting;
     private string? _scannedFolder;
 
     public VideoVerifierPage()
@@ -24,9 +26,9 @@ public sealed partial class VideoVerifierPage : Page
         FilterBox.SelectedIndex = 0;
         // ffmpeg already decodes multithreaded, so a few files at once saturates most CPUs.
         ParallelBox.Value = Math.Clamp(Environment.ProcessorCount / 4, 1, 4);
-        FileDrop.Attach(this, "Scan this folder", () => !_busy, OnDropAsync);
+        FileDrop.Attach(this, "Scan this folder", () => !Busy, OnDropAsync);
         MainWindow.TrackActivity(() => _cts is not null ? "Video Verifier is checking videos."
-            : _busy ? "Video Verifier is moving or deleting files." : null);
+            : _acting ?"Video Verifier is moving or deleting files." : null);
         // Kills the ffmpeg processes, which would otherwise outlive the app.
         MainWindow.Exiting += () => _cts?.Cancel();
     }
@@ -62,7 +64,7 @@ public sealed partial class VideoVerifierPage : Page
 
     private async void Refresh_Click(object sender, RoutedEventArgs e)
     {
-        if (!_busy) await ScanAsync(refresh: true);
+        if (!Busy) await ScanAsync(refresh: true);
     }
 
     /// <summary>
@@ -94,7 +96,7 @@ public sealed partial class VideoVerifierPage : Page
         _scannedFolder = folder;
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
-        SetBusy(true);
+        UpdateState();
 
         try
         {
@@ -156,7 +158,7 @@ public sealed partial class VideoVerifierPage : Page
         {
             _cts.Dispose();
             _cts = null;
-            SetBusy(false);
+            UpdateState();
             UpdateSummary();
         }
     }
@@ -195,6 +197,8 @@ public sealed partial class VideoVerifierPage : Page
         _done++;
         SyncView();
         UpdateSummary();
+        // A selected file that just finished may unlock the file actions.
+        UpdateSelection();
     }
 
     private async void Export_Click(object sender, RoutedEventArgs e)
@@ -223,7 +227,7 @@ public sealed partial class VideoVerifierPage : Page
 
     private void ClearList_Click(object sender, RoutedEventArgs e)
     {
-        if (_busy) return;
+        if (Busy) return;
         _items.Clear();
         SyncView();
         _valid = _invalid = _done = 0;
@@ -231,7 +235,7 @@ public sealed partial class VideoVerifierPage : Page
         DetailsBox.Text = "";
         Info.IsOpen = false;
         SummaryText.Text = "";
-        SetBusy(false);
+        UpdateState();
     }
 
     // Quote every field, and neutralise leading formula characters so spreadsheet apps
@@ -275,6 +279,12 @@ public sealed partial class VideoVerifierPage : Page
 
     private static bool IsInvalid(VideoItem i) => i.Status is VideoStatus.Invalid or VideoStatus.Failed;
 
+    private static bool IsProcessing(VideoItem i) => i.Status is VideoStatus.Pending or VideoStatus.Checking;
+
+    // Pending files only count while a scan will still get to them.
+    private bool CanActOn(IList<object> selected) =>
+        !_acting && selected.Count > 0 && (_cts is null || !selected.OfType<VideoItem>().Any(IsProcessing));
+
     private void SelectValid_Click(object sender, RoutedEventArgs e) => SelectWhere(i => i.IsValid);
 
     private void SelectInvalid_Click(object sender, RoutedEventArgs e) => SelectWhere(IsInvalid);
@@ -291,8 +301,8 @@ public sealed partial class VideoVerifierPage : Page
     {
         var count = Results.SelectedItems.Count;
         SelectionText.Text = count == 0 ? "" : $"{count} selected";
-        RecycleButton.IsEnabled = MoveButton.IsEnabled = DeleteButton.IsEnabled = !_busy && count > 0;
-        SelectValidButton.IsEnabled = SelectInvalidButton.IsEnabled = ClearButton.IsEnabled = !_busy && _items.Count > 0;
+        RecycleButton.IsEnabled = MoveButton.IsEnabled = DeleteButton.IsEnabled = CanActOn(Results.SelectedItems);
+        SelectValidButton.IsEnabled = SelectInvalidButton.IsEnabled = ClearButton.IsEnabled = !_acting && _items.Count > 0;
     }
 
     // FILTER
@@ -309,7 +319,7 @@ public sealed partial class VideoVerifierPage : Page
         {
             "Valid" => i => i.IsValid,
             "Invalid" => IsInvalid,
-            "Processing" => i => i.Status is VideoStatus.Pending or VideoStatus.Checking,
+            "Processing" => IsProcessing,
             _ => _ => true,
         };
         var want = _items.Where(show).ToList();
@@ -334,8 +344,8 @@ public sealed partial class VideoVerifierPage : Page
 
     private async Task RunActionAsync(FileAction action, string? target = null)
     {
+        if (!CanActOn(Results.SelectedItems)) return;
         var selected = Results.SelectedItems.OfType<VideoItem>().ToList();
-        if (selected.Count == 0) return;
 
         // Guard against "Select valid" clicked by mistake before a destructive action.
         var valid = selected.Count(i => i.IsValid);
@@ -343,7 +353,8 @@ public sealed partial class VideoVerifierPage : Page
             : $"{valid} of the selected files passed verification.";
         if (!await FileActions.ConfirmAsync(XamlRoot, action, selected.Count, target, warning)) return;
 
-        SetBusy(true);
+        _acting = true;
+        UpdateState();
         var (done, errors) = await FileActions.ApplyAsync(action, selected.Select(i => i.Path).ToList(), target);
         foreach (var item in selected.Where(i => done.Contains(i.Path))) _items.Remove(item);
         SyncView();
@@ -351,7 +362,9 @@ public sealed partial class VideoVerifierPage : Page
         _valid = _items.Count(i => i.IsValid);
         _invalid = _items.Count(IsInvalid);
         _done = _valid + _invalid;
-        SetBusy(false);
+        OverallProgress.Maximum = Math.Max(1, _items.Count);
+        _acting = false;
+        UpdateState();
         UpdateSummary();
 
         var (severity, message) = FileActions.Describe(action, done.Count, errors);
@@ -397,9 +410,9 @@ public sealed partial class VideoVerifierPage : Page
 
     // STATE
 
-    private void SetBusy(bool busy)
+    private void UpdateState()
     {
-        _busy = busy;
+        var busy = Busy;
         var scanning = _cts is not null;
         ScanButton.Content = scanning ? "Cancel" : "Scan";
         ScanButton.IsEnabled = !busy || scanning;

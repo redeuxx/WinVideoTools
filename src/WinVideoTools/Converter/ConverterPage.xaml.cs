@@ -3,11 +3,8 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.Windows.Storage.Pickers;
-using Windows.System;
 
 namespace WinVideoTools.Converter;
 
@@ -111,34 +108,7 @@ public sealed partial class ConverterPage : Page
         // Rescan opens up once the history has folders.
         SetBusy(false);
         FileDrop.Attach(this, "Add to queue", () => _cts is null && !_adding, OnDropAsync);
-        WatchManualScrolling();
         RestoreOnStartup(settings);
-    }
-
-    // AUTO-SCROLL
-
-    /// <summary>
-    /// Scrolling by hand during a run turns auto-scroll off, so the list stops jumping away from what
-    /// the user is reading. ViewChanged cannot tell user scrolls from ScrollIntoView, so this watches
-    /// the input instead. handledEventsToo is needed because the list consumes these events itself.
-    /// </summary>
-    private void WatchManualScrolling()
-    {
-        Queue.AddHandler(PointerWheelChangedEvent, new PointerEventHandler((_, _) => StopAutoScroll()), handledEventsToo: true);
-        Queue.AddHandler(PointerPressedEvent, new PointerEventHandler((_, e) =>
-        {
-            if (IsInScrollBar(e.OriginalSource as DependencyObject)) StopAutoScroll();
-        }), handledEventsToo: true);
-        Queue.AddHandler(KeyDownEvent, new KeyEventHandler((_, e) =>
-        {
-            if (e.Key is VirtualKey.PageUp or VirtualKey.PageDown or VirtualKey.Home or VirtualKey.End or VirtualKey.Up or VirtualKey.Down)
-                StopAutoScroll();
-        }), handledEventsToo: true);
-        // Touch and precision-touchpad panning go through direct manipulation, not wheel events.
-        Queue.Loaded += (_, _) =>
-        {
-            if (VisualTree.FindChild<ScrollViewer>(Queue) is { } viewer) viewer.DirectManipulationStarted += (_, _) => StopAutoScroll();
-        };
     }
 
     private void GoToCurrent_Click(object sender, RoutedEventArgs e)
@@ -147,18 +117,6 @@ public sealed partial class ConverterPage : Page
         if (_items.FirstOrDefault(i => i.IsConverting) is not { } item) return;
         if (_view.Contains(item)) Queue.ScrollIntoView(item);
         else ShowInfo(InfoBarSeverity.Informational, "The file being converted is hidden by the status filter. Set it to All to see it.");
-    }
-
-    private void StopAutoScroll()
-    {
-        if (_cts is not null && AutoScrollBox.IsChecked == true) AutoScrollBox.IsChecked = false;
-    }
-
-    private static bool IsInScrollBar(DependencyObject? d)
-    {
-        for (; d is not null; d = VisualTreeHelper.GetParent(d))
-            if (d is ScrollBar) return true;
-        return false;
     }
 
     // Dropped folders are searched like Add folder, including subfolders.

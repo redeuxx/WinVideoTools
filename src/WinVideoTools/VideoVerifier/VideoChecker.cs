@@ -43,6 +43,17 @@ public static partial class VideoChecker
         + "them overrun their data by a few bits (\"Bits overconsumption\"), which can leave one frame "
         + "very slightly off. Players hide this. Converting the file produces a copy without these errors.";
 
+    // A file that decodes to full length with at most this share of damaged packets (per video frame)
+    // is mostly intact: players skip the bad spot as a brief glitch.
+    private const double MaxDamagedFraction = 0.01;
+
+    private static string DamageNote(int damaged, long frames) =>
+        $"NOTE: A small part of this file is damaged: {damaged} packet{(damaged == 1 ? "" : "s")} could not be "
+        + $"decoded cleanly, out of {frames} video frames. Players skip over the damage, so it shows as a brief "
+        + "freeze, smear or audio dropout, and the rest of the file is intact. Converting the file produces a copy "
+        + "that decodes without errors, but the glitch stays in the picture because the lost data cannot be "
+        + "recovered. Get a fresh copy from the source if it has to be perfect.";
+
     /// <summary>
     /// True for ffmpeg errors that mark tiny, invisible damage: a skipped ASF packet, or a frame that
     /// overran its data by only a few bits. Such files play normally.
@@ -83,7 +94,8 @@ public static partial class VideoChecker
         foreach (var arg in new[]
         {
             "-hide_banner", "-nostdin", "-nostats",
-            "-loglevel", "level+info",
+            // repeat: log every repeated line instead of "Last message repeated", so damage is counted fully.
+            "-loglevel", "repeat+level+info",
             "-progress", "pipe:1",
             "-i", "file:" + file,
             "-f", "null", "-",
@@ -105,6 +117,8 @@ public static partial class VideoChecker
             var log = new List<string>();
             var errors = new List<string>();
             var minor = 0;
+            // Packets a decoder rejected or decoded into a corrupt frame.
+            var damaged = 0;
 
             // Stream info and errors arrive on stderr; the Duration line is printed before any progress.
             var stderrTask = Task.Run(async () =>
@@ -126,10 +140,12 @@ public static partial class VideoChecker
                         // ponytail: no cap on minor errors; a file with hundreds of them would pass. Add a count limit if that shows up.
                         if (IsMinorError(err.Groups[2].Value)) minor++;
                         else errors.Add(err.Groups[2].Value);
+                        if (err.Groups[2].Value.StartsWith("Error submitting packet to decoder", StringComparison.Ordinal)) damaged++;
                         if (log.Count < MaxLogLines) log.Add(line);
                     }
                     else if (WarningLine().IsMatch(line))
                     {
+                        if (line.EndsWith("corrupt decoded frame", StringComparison.Ordinal)) damaged++;
                         if (log.Count < MaxLogLines) log.Add(line);
                     }
                     else if (duration == 0 && TryParseDuration(line, out var d))
@@ -140,9 +156,15 @@ public static partial class VideoChecker
             }, ct);
 
             double decoded = 0;
+            long frames = 0;
             while (await proc.StandardOutput.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
             {
-                if (line.StartsWith("out_time_us=", StringComparison.Ordinal)
+                if (line.StartsWith("frame=", StringComparison.Ordinal)
+                    && long.TryParse(line.AsSpan("frame=".Length), out var f))
+                {
+                    frames = f;
+                }
+                else if (line.StartsWith("out_time_us=", StringComparison.Ordinal)
                     && long.TryParse(line.AsSpan("out_time_us=".Length), out var us) && us > 0)
                 {
                     decoded = us / 1_000_000.0;
@@ -155,20 +177,28 @@ public static partial class VideoChecker
             // A cancel kills ffmpeg, which ends the output early without an exception; never judge that output.
             ct.ThrowIfCancellationRequested();
 
+            var truncated = duration > 0 && decoded < duration - Math.Max(MinToleranceSeconds, duration * ToleranceFraction);
+            // ponytail: a demuxer that resyncs past a large hole drops packets without counting them as damaged.
+            // Compare frames against duration x fps if such a file ever passes as minor.
+            var smallDamage = errors.Count > 0 && damaged > 0 && !truncated && proc.ExitCode == 0
+                              && damaged <= frames * MaxDamagedFraction;
+
             var problems = new List<string>();
-            if (errors.Count > 0)
+            if (errors.Count > 0 && !smallDamage)
                 problems.Add(errors.Count == 1 ? errors[0] : $"{errors[0]} (+{errors.Count - 1} more errors)");
-            if (duration > 0 && decoded < duration - Math.Max(MinToleranceSeconds, duration * ToleranceFraction))
+            if (truncated)
                 problems.Add($"Decoded {decoded:0.0}s of {duration:0.0}s");
             if (proc.ExitCode != 0 && problems.Count == 0)
                 problems.Add($"ffmpeg exited with code {proc.ExitCode}");
 
             if (minor > 0) log.InsertRange(0, [MinorNote, ""]);
+            if (smallDamage) log.InsertRange(0, [DamageNote(damaged, frames), ""]);
             var details = string.Join(Environment.NewLine, log);
             var ok = $"OK, {TimeSpan.FromSeconds(Math.Round(decoded)):g}";
+            if (smallDamage) ok += $", slightly damaged ({damaged} bad packet{(damaged == 1 ? "" : "s")}), convert to fix";
             if (minor > 0) ok += $", {minor} minor error{(minor == 1 ? "" : "s")}";
             return problems.Count == 0
-                ? new CheckResult(true, ok, details, minor > 0)
+                ? new CheckResult(true, ok, details, minor > 0 || smallDamage)
                 : new CheckResult(false, string.Join("; ", problems), details);
         }
         finally

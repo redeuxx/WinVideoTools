@@ -38,11 +38,23 @@ Ffmpeg("-f", "lavfi", "-i", "testsrc=duration=6:size=320x240:rate=30", "-vf", "s
 var clean = File.ReadAllBytes(P("ok.mkv"));
 for (var i = clean.Length / 3; i < clean.Length / 3 + 4096; i += 128) clean[i] ^= 0xFF;
 File.WriteAllBytes(P("damaged.mkv"), clean);
+// A zeroed stretch inside MP4 sample data (incomplete download) loses a few packets: small damage, still valid.
+// Zeroing a third of the file is not small.
+Ffmpeg("-f", "lavfi", "-i", "testsrc=duration=60:size=320x240:rate=30", "-f", "lavfi", "-i", "sine=duration=60",
+       "-c:v", "libx264", "-c:a", "aac", "-shortest", P("long.mp4"));
+void Zero(string dst, double from, double to)
+{
+    var bytes = File.ReadAllBytes(P("long.mp4"));
+    Array.Clear(bytes, (int)(bytes.Length * from), (int)(bytes.Length * (to - from)));
+    File.WriteAllBytes(P(dst), bytes);
+}
+Zero("holed.mp4", 0.5, 0.502);
+Zero("bighole.mp4", 0.3, 0.6);
 
 var expected = new Dictionary<string, bool>
 {
     ["ok.mp4"] = true, ["fast.mp4"] = true, ["ok.mkv"] = true, ["-weird name ü.mp4"] = true,
-    ["dupts.mkv"] = true, ["damaged.mkv"] = false,
+    ["dupts.mkv"] = true, ["damaged.mkv"] = false, ["holed.mp4"] = true, ["bighole.mp4"] = false,
     ["trunc.mp4"] = false, ["truncfast.mp4"] = false, ["trunc.mkv"] = false,
 };
 

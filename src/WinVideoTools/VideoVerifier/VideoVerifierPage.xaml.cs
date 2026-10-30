@@ -22,7 +22,7 @@ public sealed partial class VideoVerifierPage : Page
     {
         InitializeComponent();
         Results.ItemsSource = _view;
-        FilterBox.ItemsSource = (string[])["All", "Valid", "Invalid", "Processing"];
+        FilterBox.ItemsSource = (string[])["All", "Valid", "Valid with errors", "Invalid", "Processing"];
         FilterBox.SelectedIndex = 0;
         // ffmpeg already decodes multithreaded, so a few files at once saturates most CPUs.
         ParallelBox.Value = Math.Clamp(Environment.ProcessorCount / 4, 1, 4);
@@ -337,6 +337,7 @@ public sealed partial class VideoVerifierPage : Page
         Func<VideoItem, bool> show = (FilterBox.SelectedItem as string) switch
         {
             "Valid" => i => i.IsValid,
+            "Valid with errors" => i => i.Status == VideoStatus.ValidWithErrors,
             "Invalid" => IsInvalid,
             "Processing" => IsProcessing,
             _ => _ => true,

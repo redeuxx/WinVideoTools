@@ -15,6 +15,8 @@ public sealed partial class VideoVerifierPage : Page
     private int _valid, _invalid, _done;
     // Moving or deleting files; a scan is running while _cts is set. Either can run while the other does.
     private bool _acting;
+    // Files the current action is moving or deleting; the scan does not start on them meanwhile.
+    private HashSet<VideoItem> _actingOn = [];
     private bool Busy => _cts is not null || _acting;
     private string? _scannedFolder;
 
@@ -167,12 +169,26 @@ public sealed partial class VideoVerifierPage : Page
     // Runs on the UI thread; only the ffmpeg work inside VideoChecker leaves it.
     private async Task CheckOneAsync(VideoItem item, SemaphoreSlim gate, double damageLimit, CancellationToken ct)
     {
-        await gate.WaitAsync(ct);
+        // A file being moved or deleted waits for that to finish, then is skipped if it is gone.
+        while (true)
+        {
+            await gate.WaitAsync(ct);
+            if (!_actingOn.Contains(item)) break;
+            gate.Release();
+            await Task.Delay(250, ct); // ponytail: polls; an event if actions ever take long
+        }
+        if (!_items.Contains(item))
+        {
+            gate.Release();
+            return;
+        }
         try
         {
             item.Status = VideoStatus.Checking;
             if (AutoScrollBox.IsChecked == true && _view.Contains(item)) Results.ScrollIntoView(item);
             UpdateSummary();
+            // A selected file that just started locks the file actions.
+            UpdateSelection();
             var result = await VideoChecker.CheckAsync(
                 Ffmpeg.ExePath, item.Path, damageLimit, new Progress<double>(p => item.Progress = p), ct);
             item.Summary = result.Summary;
@@ -284,9 +300,9 @@ public sealed partial class VideoVerifierPage : Page
 
     private static bool IsProcessing(VideoItem i) => i.Status is VideoStatus.Pending or VideoStatus.Checking;
 
-    // Pending files only count while a scan will still get to them.
+    // Only files ffmpeg has open block an action; queued ones are skipped by the scan if they go.
     private bool CanActOn(IList<object> selected) =>
-        !_acting && selected.Count > 0 && (_cts is null || !selected.OfType<VideoItem>().Any(IsProcessing));
+        !_acting && selected.Count > 0 && !selected.OfType<VideoItem>().Any(i => i.IsChecking);
 
     private void SelectValid_Click(object sender, RoutedEventArgs e) => SelectWhere(i => i.IsValid);
 
@@ -372,10 +388,18 @@ public sealed partial class VideoVerifierPage : Page
         var warning = action == FileAction.Move || valid == 0 ? null
             : $"{valid} of the selected files passed verification.";
         if (!await FileActions.ConfirmAsync(XamlRoot, action, selected.Count, target, warning)) return;
+        // The scan kept going while the dialog was open.
+        if (selected.Any(i => i.IsChecking))
+        {
+            ShowInfo(InfoBarSeverity.Warning, "A selected file started being checked. Try again once it finishes.");
+            return;
+        }
 
         _acting = true;
+        _actingOn = [.. selected];
         UpdateState();
         var (done, errors) = await FileActions.ApplyAsync(action, selected.Select(i => i.Path).ToList(), target);
+        _actingOn = [];
         foreach (var item in selected.Where(i => done.Contains(i.Path))) _items.Remove(item);
         SyncView();
 
@@ -447,7 +471,8 @@ public sealed partial class VideoVerifierPage : Page
     {
         OverallProgress.Value = _done;
         var checking = _items.Count(i => i.IsChecking);
-        SummaryText.Text = $"{_items.Count} files: {_valid} valid, {_invalid} invalid, {checking} processing, {_items.Count - _done - checking} not checked";
+        var withErrors = _items.Count(i => i.Status == VideoStatus.ValidWithErrors);
+        SummaryText.Text = $"{_items.Count} files: {_valid - withErrors} valid, {withErrors} valid with errors, {_invalid} invalid,{checking} processing, {_items.Count - _done - checking} not checked";
     }
 
     // Closes itself after 10 seconds unless a newer message has replaced it; errors stay until dismissed.

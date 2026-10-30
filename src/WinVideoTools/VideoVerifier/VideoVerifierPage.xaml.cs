@@ -316,8 +316,8 @@ public sealed partial class VideoVerifierPage : Page
     {
         var count = Results.SelectedItems.Count;
         SelectionText.Text = count == 0 ? "" : $"{count} selected";
-        RecycleButton.IsEnabled = MoveButton.IsEnabled = DeleteButton.IsEnabled = CanActOn(Results.SelectedItems);
-        SelectValidButton.IsEnabled = SelectInvalidButton.IsEnabled = ClearButton.IsEnabled = !_acting && _items.Count > 0;
+        FileActionButton.IsEnabled = CanActOn(Results.SelectedItems);
+        SelectButton.IsEnabled = !_acting && _items.Count > 0;
     }
 
     // FILTER
@@ -350,7 +350,7 @@ public sealed partial class VideoVerifierPage : Page
 
     private async void Recycle_Click(object sender, RoutedEventArgs e) => await RunActionAsync(FileAction.Recycle);
 
-    private async void Delete_Click(object sender, RoutedEventArgs e) => await RunActionAsync(FileAction.Delete);
+    private async void Delete_Click(SplitButton sender, SplitButtonClickEventArgs e) => await RunActionAsync(FileAction.Delete);
 
     private async void Move_Click(object sender, RoutedEventArgs e)
     {

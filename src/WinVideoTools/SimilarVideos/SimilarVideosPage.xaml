@@ -189,15 +189,27 @@
              SelectionText has a MinWidth so a changing count does not move the file actions to another line. -->
         <app:WrapPanel Grid.Row="5" HorizontalSpacing="16">
             <app:WrapPanel>
-                <Button x:Name="SelectBestButton" Content="Select all but best copy" Click="SelectBest_Click" IsEnabled="False"
-                        ToolTipService.ToolTip="In each group, keeps the highest resolution (then smallest) file and selects the rest" />
-                <Button x:Name="ClearButton" Content="Clear selection" Click="Clear_Click" IsEnabled="False" />
+                <DropDownButton x:Name="SelectButton" Content="Select" IsEnabled="False">
+                    <DropDownButton.Flyout>
+                        <MenuFlyout Placement="Bottom">
+                            <MenuFlyoutItem Text="Select all but best copy" Click="SelectBest_Click"
+                                            ToolTipService.ToolTip="In each group, keeps the highest resolution (then smallest) file and selects the rest" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem Text="Clear selection" Click="Clear_Click" />
+                        </MenuFlyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
                 <TextBlock x:Name="SelectionText" VerticalAlignment="Center" Margin="8,0,0,0" MinWidth="100" />
             </app:WrapPanel>
             <app:WrapPanel>
-                <Button x:Name="RecycleButton" Content="Move to Recycle Bin" Click="Recycle_Click" IsEnabled="False" />
-                <Button x:Name="MoveButton" Content="Move to folder..." Click="Move_Click" IsEnabled="False" />
-                <Button x:Name="DeleteButton" Content="Delete permanently" Click="Delete_Click" IsEnabled="False" />
+                <SplitButton x:Name="FileActionButton" Content="Delete permanently" Click="Delete_Click" IsEnabled="False">
+                    <SplitButton.Flyout>
+                        <MenuFlyout Placement="Bottom">
+                            <MenuFlyoutItem Text="Move to Recycle Bin" Click="Recycle_Click" />
+                            <MenuFlyoutItem Text="Move to folder..." Click="Move_Click" />
+                        </MenuFlyout>
+                    </SplitButton.Flyout>
+                </SplitButton>
             </app:WrapPanel>
         </app:WrapPanel>
     </Grid>

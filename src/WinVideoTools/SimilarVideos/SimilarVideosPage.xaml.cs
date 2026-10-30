@@ -329,15 +329,15 @@ public sealed partial class SimilarVideosPage : Page
     {
         var count = Selected.Count();
         SelectionText.Text = count == 0 ? "" : $"{count} selected";
-        RecycleButton.IsEnabled = MoveButton.IsEnabled = DeleteButton.IsEnabled = !_busy && count > 0;
-        SelectBestButton.IsEnabled = ClearButton.IsEnabled = !_busy && _groups.Count > 0;
+        FileActionButton.IsEnabled = !_busy && count > 0;
+        SelectButton.IsEnabled = !_busy && _groups.Count > 0;
     }
 
     // FILE ACTIONS
 
     private async void Recycle_Click(object sender, RoutedEventArgs e) => await RunActionAsync(FileAction.Recycle);
 
-    private async void Delete_Click(object sender, RoutedEventArgs e) => await RunActionAsync(FileAction.Delete);
+    private async void Delete_Click(SplitButton sender, SplitButtonClickEventArgs e) => await RunActionAsync(FileAction.Delete);
 
     private async void Move_Click(object sender, RoutedEventArgs e)
     {

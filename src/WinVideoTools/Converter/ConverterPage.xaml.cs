@@ -1094,6 +1094,7 @@ public sealed partial class ConverterPage : Page
             var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
             package.SetText(Path.GetFullPath(path));
             Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            Toast.Show(XamlRoot, "Path copied");
         }
         catch (Exception ex)
         {
@@ -1109,6 +1110,7 @@ public sealed partial class ConverterPage : Page
             var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
             package.SetText(DetailsBox.Text);
             Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            Toast.Show(XamlRoot, "Details copied");
         }
         catch (Exception ex)
         {

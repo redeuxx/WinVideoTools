@@ -301,6 +301,7 @@ public sealed partial class VideoVerifierPage : Page
             var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
             package.SetText(DetailsBox.Text);
             Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            Toast.Show(XamlRoot, "Details copied");
         }
         catch (Exception ex)
         {

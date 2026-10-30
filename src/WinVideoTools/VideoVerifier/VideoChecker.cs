@@ -43,10 +43,6 @@ public static partial class VideoChecker
         + "them overrun their data by a few bits (\"Bits overconsumption\"), which can leave one frame "
         + "very slightly off. Players hide this. Converting the file produces a copy without these errors.";
 
-    // A file that decodes to full length with at most this share of damaged packets (per video frame)
-    // is mostly intact: players skip the bad spot as a brief glitch.
-    private const double MaxDamagedFraction = 0.01;
-
     private static string DamageNote(int damaged, long frames) =>
         $"NOTE: A small part of this file is damaged: {damaged} packet{(damaged == 1 ? "" : "s")} could not be "
         + $"decoded cleanly, out of {frames} video frames. Players skip over the damage, so it shows as a brief "
@@ -78,7 +74,12 @@ public static partial class VideoChecker
         return true;
     }
 
-    public static async Task<CheckResult> CheckAsync(string ffmpegPath, string file, IProgress<double>? progress, CancellationToken ct)
+    /// <param name="maxDamagedFraction">
+    /// A file that decodes to full length with at most this share of damaged packets (per video frame)
+    /// is mostly intact, since players skip the bad spot as a brief glitch, so it passes with errors.
+    /// </param>
+    public static async Task<CheckResult> CheckAsync(string ffmpegPath, string file, double maxDamagedFraction,
+        IProgress<double>? progress, CancellationToken ct)
     {
         var psi = new ProcessStartInfo(ffmpegPath)
         {
@@ -181,7 +182,7 @@ public static partial class VideoChecker
             // ponytail: a demuxer that resyncs past a large hole drops packets without counting them as damaged.
             // Compare frames against duration x fps if such a file ever passes as minor.
             var smallDamage = errors.Count > 0 && damaged > 0 && !truncated && proc.ExitCode == 0
-                              && damaged <= frames * MaxDamagedFraction;
+                              && damaged <= frames * maxDamagedFraction;
 
             var problems = new List<string>();
             if (errors.Count > 0 && !smallDamage)

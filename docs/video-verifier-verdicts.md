@@ -39,7 +39,9 @@ A damaged file is yellow instead of red when all of these hold:
 
 - It decodes to its full length (see "Ends early" below).
 - ffmpeg exits normally.
-- Damaged packets are no more than **1% of the video frames** (`MaxDamagedFraction`). A damaged packet is one logged as `Error submitting packet to decoder` or `corrupt decoded frame`, counting audio and video.
+- Damaged packets are no more than the **allowed damage** share of the video frames. A damaged packet is one logged as `Error submitting packet to decoder` or `corrupt decoded frame`, counting audio and video.
+
+Allowed damage is set in the Options dialog as a percentage, 1% by default. It is read when a scan starts, so change it before scanning. 0 marks any damage invalid. A refresh keeps earlier results for unchanged files, so run a full scan to apply a new value to them.
 
 Converting such a file gives a copy that decodes without errors. The glitch stays in the picture, because the lost data cannot be recovered. Getting a fresh copy from the source is the only way to make it perfect.
 
@@ -50,7 +52,7 @@ Audio-only files have no video frames to compare against, so any damage in them 
 ## Invalid (red)
 
 - **Ends early.** The decoded length falls short of the duration in the file header by more than 1 second or 2%, whichever is larger. A truncated file often plays fine but stops early, and converting cannot bring back the missing part.
-- **Too much damage.** More damaged packets than the 1% limit.
+- **Too much damage.** More damaged packets than the allowed damage.
 - **Other errors.** Any error that is not ignored, minor, or part of small damage. This includes container errors with no damaged packets, such as a garbled MKV.
 - **ffmpeg fails.** A non-zero exit code.
 
@@ -58,4 +60,4 @@ Audio-only files have no video frames to compare against, so any damage in them 
 
 - A demuxer that skips past a large hole in a file (most likely MKV) drops the packets in that hole without counting them as damaged. If the file still decodes to full length, it could be marked yellow when it should be red. Comparing the frame count against duration times frame rate would catch this.
 - Minor ASF errors have no count limit, so a file with hundreds of them would still be yellow.
-- The 1% limit is a judgment call. Raise `MaxDamagedFraction` if files that play fine still come up red.
+- The 1% default is a judgment call. Raise allowed damage in Options if files that play fine still come up red.

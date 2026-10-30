@@ -140,7 +140,8 @@ public sealed partial class VideoVerifierPage : Page
 
             var pending = _items.Where(i => i.Status == VideoStatus.Pending).ToList();
             using var gate = new SemaphoreSlim((int)Math.Clamp(double.IsNaN(ParallelBox.Value) ? 1 : ParallelBox.Value, 1, 32));
-            await Task.WhenAll(pending.Select(item => CheckOneAsync(item, gate, ct)));
+            var damageLimit = Math.Clamp(double.IsNaN(DamageLimitBox.Value) ? 1 : DamageLimitBox.Value, 0, 100) / 100;
+            await Task.WhenAll(pending.Select(item => CheckOneAsync(item, gate, damageLimit, ct)));
             if (refresh)
                 ShowInfo(InfoBarSeverity.Success, pending.Count == 0
                     ? "Refreshed: no new or changed files."
@@ -164,7 +165,7 @@ public sealed partial class VideoVerifierPage : Page
     }
 
     // Runs on the UI thread; only the ffmpeg work inside VideoChecker leaves it.
-    private async Task CheckOneAsync(VideoItem item, SemaphoreSlim gate, CancellationToken ct)
+    private async Task CheckOneAsync(VideoItem item, SemaphoreSlim gate, double damageLimit, CancellationToken ct)
     {
         await gate.WaitAsync(ct);
         try
@@ -173,7 +174,7 @@ public sealed partial class VideoVerifierPage : Page
             if (AutoScrollBox.IsChecked == true && _view.Contains(item)) Results.ScrollIntoView(item);
             UpdateSummary();
             var result = await VideoChecker.CheckAsync(
-                Ffmpeg.ExePath, item.Path, new Progress<double>(p => item.Progress = p), ct);
+                Ffmpeg.ExePath, item.Path, damageLimit, new Progress<double>(p => item.Progress = p), ct);
             item.Summary = result.Summary;
             item.Details = result.Details;
             item.Status = !result.IsValid ? VideoStatus.Invalid : result.HasMinorErrors ? VideoStatus.ValidWithErrors : VideoStatus.Valid;

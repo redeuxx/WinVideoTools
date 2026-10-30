@@ -75,7 +75,7 @@ foreach (var (msg, minor) in new (string, bool)[]
 }
 foreach (var (name, valid) in expected)
 {
-    var r = await VideoChecker.CheckAsync(ffmpeg, P(name), null, CancellationToken.None);
+    var r = await VideoChecker.CheckAsync(ffmpeg, P(name), 0.01, null, CancellationToken.None);
     var ok = r.IsValid == valid;
     if (!ok) failed++;
     Console.WriteLine($"{(ok ? "PASS" : "FAIL")}  {name,-20} valid={r.IsValid}  {r.Summary}");

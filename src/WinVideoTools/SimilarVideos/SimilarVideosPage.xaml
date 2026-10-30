@@ -185,10 +185,9 @@
         </Grid>
         </Grid>
 
-        <!-- Groups wrap as units so selection and file actions stay together when the window is narrow.
-             SelectionText has a MinWidth so a changing count does not move the file actions to another line. -->
-        <app:WrapPanel Grid.Row="5" HorizontalSpacing="16">
-            <app:WrapPanel>
+        <!-- SelectionText keeps its line when empty so the list above does not resize as the count comes and goes. -->
+        <StackPanel Grid.Row="5" Spacing="4">
+            <StackPanel Orientation="Horizontal" Spacing="8">
                 <DropDownButton x:Name="SelectButton" Content="Select" IsEnabled="False">
                     <DropDownButton.Flyout>
                         <MenuFlyout Placement="Bottom">
@@ -199,9 +198,6 @@
                         </MenuFlyout>
                     </DropDownButton.Flyout>
                 </DropDownButton>
-                <TextBlock x:Name="SelectionText" VerticalAlignment="Center" Margin="8,0,0,0" MinWidth="100" />
-            </app:WrapPanel>
-            <app:WrapPanel>
                 <SplitButton x:Name="FileActionButton" Content="Delete permanently" Click="Delete_Click" IsEnabled="False">
                     <SplitButton.Flyout>
                         <MenuFlyout Placement="Bottom">
@@ -210,7 +206,8 @@
                         </MenuFlyout>
                     </SplitButton.Flyout>
                 </SplitButton>
-            </app:WrapPanel>
-        </app:WrapPanel>
+            </StackPanel>
+            <TextBlock x:Name="SelectionText" MinHeight="20" />
+        </StackPanel>
     </Grid>
 </Page>

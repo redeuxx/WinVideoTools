@@ -75,7 +75,7 @@ public static partial class VideoChecker
     }
 
     /// <param name="maxDamagedFraction">
-    /// A file that decodes to full length with at most this share of damaged packets (per video frame)
+    /// A file that decodes to full length with at most this share of damaged video frames
     /// is mostly intact, since players skip the bad spot as a brief glitch, so it passes with errors.
     /// </param>
     public static async Task<CheckResult> CheckAsync(string ffmpegPath, string file, double maxDamagedFraction,
@@ -118,8 +118,14 @@ public static partial class VideoChecker
             var log = new List<string>();
             var errors = new List<string>();
             var minor = 0;
-            // Packets a decoder rejected or decoded into a corrupt frame.
-            var damaged = 0;
+            // Packets a decoder rejected or decoded into a corrupt frame, split by stream: ffmpeg tags
+            // audio decoder lines "[aist#".
+            int videoDamaged = 0, audioDamaged = 0;
+            void CountDamage(string line)
+            {
+                if (line.StartsWith("[aist#", StringComparison.Ordinal)) audioDamaged++;
+                else videoDamaged++;
+            }
 
             // Stream info and errors arrive on stderr; the Duration line is printed before any progress.
             var stderrTask = Task.Run(async () =>
@@ -141,12 +147,12 @@ public static partial class VideoChecker
                         // ponytail: no cap on minor errors; a file with hundreds of them would pass. Add a count limit if that shows up.
                         if (IsMinorError(err.Groups[2].Value)) minor++;
                         else errors.Add(err.Groups[2].Value);
-                        if (err.Groups[2].Value.StartsWith("Error submitting packet to decoder", StringComparison.Ordinal)) damaged++;
+                        if (err.Groups[2].Value.StartsWith("Error submitting packet to decoder", StringComparison.Ordinal)) CountDamage(line);
                         if (log.Count < MaxLogLines) log.Add(line);
                     }
                     else if (WarningLine().IsMatch(line))
                     {
-                        if (line.EndsWith("corrupt decoded frame", StringComparison.Ordinal)) damaged++;
+                        if (line.EndsWith("corrupt decoded frame", StringComparison.Ordinal)) CountDamage(line);
                         if (log.Count < MaxLogLines) log.Add(line);
                     }
                     else if (duration == 0 && TryParseDuration(line, out var d))
@@ -181,12 +187,21 @@ public static partial class VideoChecker
             var truncated = duration > 0 && decoded < duration - Math.Max(MinToleranceSeconds, duration * ToleranceFraction);
             // ponytail: a demuxer that resyncs past a large hole drops packets without counting them as damaged.
             // Compare frames against duration x fps if such a file ever passes as minor.
-            var smallDamage = errors.Count > 0 && damaged > 0 && !truncated && proc.ExitCode == 0
-                              && damaged <= frames * maxDamagedFraction;
+            var damaged = videoDamaged + audioDamaged;
+            // A hole in the file hits both streams, and audio has more packets per second than video has frames,
+            // so the share is measured on video alone. Only when the video is untouched does audio damage count.
+            var share = frames == 0 ? 0 : (double)(videoDamaged > 0 ? videoDamaged : audioDamaged) / frames;
+            var smallDamage = errors.Count > 0 && damaged > 0 && frames > 0 && !truncated && proc.ExitCode == 0
+                              && share <= maxDamagedFraction;
 
             var problems = new List<string>();
             if (errors.Count > 0 && !smallDamage)
                 problems.Add(errors.Count == 1 ? errors[0] : $"{errors[0]} (+{errors.Count - 1} more errors)");
+            // Say why damage that decoded to full length still failed, so the allowed damage option can be tuned.
+            if (errors.Count > 0 && !smallDamage && damaged > 0 && !truncated)
+                problems.Add(proc.ExitCode != 0 ? $"ffmpeg exited with code {proc.ExitCode}"
+                    : frames == 0 ? $"{damaged} damaged packets, no video frames to compare against"
+                    : $"damaged {100 * share:0.##}% of video frames ({100 * maxDamagedFraction:0.##}% allowed)");
             if (truncated)
                 problems.Add($"Decoded {decoded:0.0}s of {duration:0.0}s");
             if (proc.ExitCode != 0 && problems.Count == 0)

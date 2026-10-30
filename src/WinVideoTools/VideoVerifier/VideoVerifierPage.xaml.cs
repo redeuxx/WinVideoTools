@@ -140,7 +140,7 @@ public sealed partial class VideoVerifierPage : Page
 
             var pending = _items.Where(i => i.Status == VideoStatus.Pending).ToList();
             using var gate = new SemaphoreSlim((int)Math.Clamp(double.IsNaN(ParallelBox.Value) ? 1 : ParallelBox.Value, 1, 32));
-            var damageLimit = Math.Clamp(double.IsNaN(DamageLimitBox.Value) ? 1 : DamageLimitBox.Value, 0, 100) / 100;
+            var damageLimit = Math.Clamp(double.IsNaN(DamageLimitBox.Value) ? 5 : DamageLimitBox.Value, 0, 100) / 100;
             await Task.WhenAll(pending.Select(item => CheckOneAsync(item, gate, damageLimit, ct)));
             if (refresh)
                 ShowInfo(InfoBarSeverity.Success, pending.Count == 0

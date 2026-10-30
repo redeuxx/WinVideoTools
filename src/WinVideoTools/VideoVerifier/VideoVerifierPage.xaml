@@ -34,7 +34,7 @@
                 <CheckBox x:Name="RecurseBox" Content="Include subfolders" IsChecked="True" />
                 <CheckBox x:Name="AutoScrollBox" Content="Auto-scroll" IsChecked="True"
                           ToolTipService.ToolTip="Scroll the list to each file as it starts being checked" />
-                <NumberBox x:Name="DamageLimitBox" Header="Allowed damage (% of video frames)" Value="1" Minimum="0" Maximum="100"
+                <NumberBox x:Name="DamageLimitBox" Header="Allowed damage (% of video frames)" Value="5" Minimum="0" Maximum="100"
                            SmallChange="0.5" SpinButtonPlacementMode="Inline" HorizontalAlignment="Left" Width="260"
                            ToolTipService.ToolTip="A file that decodes to full length with at most this share of damaged packets is marked Valid, errors (yellow) instead of Invalid. 0 marks any damage invalid." />
             </StackPanel>

@@ -39,9 +39,13 @@ A damaged file is yellow instead of red when all of these hold:
 
 - It decodes to its full length (see "Ends early" below).
 - ffmpeg exits normally.
-- Damaged packets are no more than the **allowed damage** share of the video frames. A damaged packet is one logged as `Error submitting packet to decoder` or `corrupt decoded frame`, counting audio and video.
+- Damaged video packets are no more than the **allowed damage** share of the video frames. A damaged packet is one logged as `Error submitting packet to decoder` or `corrupt decoded frame`.
 
-Allowed damage is set in the Options dialog as a percentage, 1% by default. It is read when a scan starts, so change it before scanning. 0 marks any damage invalid. A refresh keeps earlier results for unchanged files, so run a full scan to apply a new value to them.
+The share is measured on video alone. A hole in the file damages both streams, and audio has more packets per second than video has frames, so counting audio too would roughly double the share. Only when the video is untouched are damaged audio packets compared against the video frames instead.
+
+When damage is over the limit, the summary says by how much, for example `damaged 7.4% of video frames (5% allowed)`.
+
+Allowed damage is set in the Options dialog as a percentage, 5% by default. That covers the typical case, a hole of about a second, in any clip longer than about 20 seconds, while a file with large parts missing stays invalid. It is read when a scan starts, so change it before scanning. 0 marks any damage invalid. A refresh keeps earlier results for unchanged files, so run a full scan to apply a new value to them.
 
 Converting such a file gives a copy that decodes without errors. The glitch stays in the picture, because the lost data cannot be recovered. Getting a fresh copy from the source is the only way to make it perfect.
 
@@ -60,4 +64,4 @@ Audio-only files have no video frames to compare against, so any damage in them 
 
 - A demuxer that skips past a large hole in a file (most likely MKV) drops the packets in that hole without counting them as damaged. If the file still decodes to full length, it could be marked yellow when it should be red. Comparing the frame count against duration times frame rate would catch this.
 - Minor ASF errors have no count limit, so a file with hundreds of them would still be yellow.
-- The 1% default is a judgment call. Raise allowed damage in Options if files that play fine still come up red.
+- The 5% default is a judgment call. Raise allowed damage in Options if files that play fine still come up red.

@@ -325,6 +325,9 @@
             </Grid.ColumnDefinitions>
             <TextBlock Text="ffmpeg command and log for selected file" VerticalAlignment="Bottom" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <Button Click="CopyDetails_Click" ToolTipService.ToolTip="Copy the ffmpeg command and log" AutomationProperties.Name="Copy details">
+                    <FontIcon Glyph="&#xE8C8;" FontSize="14" />
+                </Button>
                 <Button x:Name="RemoveButton" Content="Remove selected" Click="Remove_Click" IsEnabled="False" Opacity="0"
                         ToolTipService.ToolTip="Take the selected files off the list. Nothing is deleted from disk." />
                 <Button x:Name="DeleteSelectedButton" Content="Delete selected..." Click="DeleteSelected_Click" IsEnabled="False" Opacity="0"

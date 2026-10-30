@@ -291,6 +291,21 @@ public sealed partial class VideoVerifierPage : Page
 
     private void Clear_Click(object sender, RoutedEventArgs e) => SelectWhere(_ => false);
 
+    private void CopyDetails_Click(object sender, RoutedEventArgs e)
+    {
+        if (DetailsBox.Text == "") return;
+        try
+        {
+            var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(DetailsBox.Text);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+        }
+        catch (Exception ex)
+        {
+            ShowInfo(InfoBarSeverity.Error, $"Could not copy the details: {ex.Message}");
+        }
+    }
+
     private void SelectWhere(Func<VideoItem, bool> select)
     {
         Results.SelectedItems.Clear();

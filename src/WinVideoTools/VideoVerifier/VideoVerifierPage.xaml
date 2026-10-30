@@ -118,7 +118,21 @@
             </app:WrapPanel>
         </app:WrapPanel>
 
-        <TextBox x:Name="DetailsBox" Grid.Row="6" Header="Details for selected file" IsReadOnly="True" TextWrapping="Wrap"
-                 AcceptsReturn="True" Height="140" FontFamily="Consolas" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+        <Grid Grid.Row="6" RowSpacing="4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Details for selected file" VerticalAlignment="Bottom" />
+            <Button Grid.Column="1" Click="CopyDetails_Click" ToolTipService.ToolTip="Copy the details" AutomationProperties.Name="Copy details">
+                <FontIcon Glyph="&#xE8C8;" FontSize="14" />
+            </Button>
+            <TextBox x:Name="DetailsBox" Grid.Row="1" Grid.ColumnSpan="2" AutomationProperties.Name="Details for selected file" IsReadOnly="True"
+                     TextWrapping="Wrap" AcceptsReturn="True" Height="140" FontFamily="Consolas" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+        </Grid>
     </Grid>
 </Page>

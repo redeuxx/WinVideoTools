@@ -1143,6 +1143,21 @@ public sealed partial class ConverterPage : Page
         }
     }
 
+    private void CopyDetails_Click(object sender, RoutedEventArgs e)
+    {
+        if (DetailsBox.Text == "") return;
+        try
+        {
+            var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(DetailsBox.Text);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+        }
+        catch (Exception ex)
+        {
+            ShowInfo(InfoBarSeverity.Error, $"Could not copy the details: {ex.Message}");
+        }
+    }
+
     // CONVERT
 
     private async void Convert_Click(object sender, RoutedEventArgs e)

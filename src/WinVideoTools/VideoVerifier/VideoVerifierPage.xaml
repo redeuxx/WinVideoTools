@@ -28,10 +28,16 @@
             <Button x:Name="BrowseButton" Grid.Column="1" Content="Browse..." Click="Browse_Click" />
         </Grid>
 
+        <!-- Takes no space until shown. The checkboxes keep their names, so code reads them as before. -->
+        <ContentDialog x:Name="OptionsDialog" Title="Verify options" CloseButtonText="Close" DefaultButton="Close">
+            <StackPanel Spacing="12">
+                <CheckBox x:Name="RecurseBox" Content="Include subfolders" IsChecked="True" />
+                <CheckBox x:Name="AutoScrollBox" Content="Auto-scroll" IsChecked="True"
+                          ToolTipService.ToolTip="Scroll the list to each file as it starts being checked" />
+            </StackPanel>
+        </ContentDialog>
+
         <app:WrapPanel Grid.Row="2" HorizontalSpacing="16">
-            <CheckBox x:Name="RecurseBox" Content="Include subfolders" IsChecked="True" VerticalAlignment="Center" />
-            <CheckBox x:Name="AutoScrollBox" Content="Auto-scroll" IsChecked="True" VerticalAlignment="Center"
-                      ToolTipService.ToolTip="Scroll the list to each file as it starts being checked" />
             <NumberBox x:Name="ParallelBox" Header="Files at once" Minimum="1" Maximum="32" SpinButtonPlacementMode="Inline" Width="160" />
             <Button x:Name="ScanButton" Content="Scan" Style="{StaticResource AccentButtonStyle}" Click="Scan_Click" VerticalAlignment="Bottom" />
             <Button x:Name="RefreshButton" Click="Refresh_Click" IsEnabled="False" VerticalAlignment="Bottom" AutomationProperties.Name="Refresh"
@@ -47,6 +53,13 @@
             <Button x:Name="ExportButton" Content="Export CSV..." Click="Export_Click" IsEnabled="False" VerticalAlignment="Bottom" />
             <Button x:Name="ClearListButton" Content="Clear list" Click="ClearList_Click" IsEnabled="False" VerticalAlignment="Bottom"
                     ToolTipService.ToolTip="Remove all results from the list (files are not touched)" />
+            <Button Click="Options_Click" VerticalAlignment="Bottom" AutomationProperties.Name="Options"
+                    ToolTipService.ToolTip="Include subfolders and auto-scroll">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE713;" FontSize="14" />
+                    <TextBlock Text="Options..." />
+                </StackPanel>
+            </Button>
         </app:WrapPanel>
 
         <StackPanel Grid.Row="3" Spacing="4">

@@ -201,6 +201,8 @@ public sealed partial class VideoVerifierPage : Page
         UpdateSelection();
     }
 
+    private async void Options_Click(object sender, RoutedEventArgs e) => await OptionsDialog.ShowAsync();
+
     private async void Export_Click(object sender, RoutedEventArgs e)
     {
         var picker = new FileSavePicker(App.MainWindow!.AppWindow.Id)

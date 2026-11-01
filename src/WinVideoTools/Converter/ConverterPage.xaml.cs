@@ -328,11 +328,14 @@ public sealed partial class ConverterPage : Page
     }
 
     /// <returns>How many videos were queued, new or changed.</returns>
-    private async Task<int> AddFolderAsync(string folder)
+    private async Task<int> AddFolderAsync(string folder, bool remember = true)
     {
-        if (!_folders.Contains(folder, StringComparer.OrdinalIgnoreCase)) _folders.Add(folder);
-        _history.AddFolder(folder);
-        SaveHistory();
+        if (remember)
+        {
+            if (!_folders.Contains(folder, StringComparer.OrdinalIgnoreCase)) _folders.Add(folder);
+            _history.AddFolder(folder);
+            SaveHistory();
+        }
         // Listing a large tree can take a while; show it moving. Reports can land after Find returns, so they stop at _adding.
         _adding = true;
         SetBusy(_cts is not null);
@@ -410,26 +413,44 @@ public sealed partial class ConverterPage : Page
         SetBusy(_cts is not null);
         if (added > 0) SessionChanged();
         var notes = new List<string>();
-        if (leftOut > 0) notes.Add($"Left out {leftOut} video{(leftOut == 1 ? "" : "s")} already processed; Rescan queues them if they change.");
+        if (leftOut > 0) notes.Add($"Left out {leftOut} video{(leftOut == 1 ? "" : "s")} already processed; Files > Rescan queues them if they change.");
         if (skipped > 0) notes.Add($"Skipped {skipped} file{(skipped == 1 ? "" : "s")} that are not videos.");
         if (notes.Count > 0) ShowInfo(InfoBarSeverity.Informational, string.Join(" ", notes));
         UpdateSummary();
         return added;
     }
 
-    // Looks in this list's folders and every folder in the history. Files already listed keep their status unless
-    // they changed since they finished, and ones gone from disk stay listed with their results.
-    private async void Rescan_Click(object sender, RoutedEventArgs e)
+    // This list's folders plus every folder in the history; a loaded session's folders may not be in the history.
+    private List<string> AllFolders() => _folders.Concat(_history.Folders).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    private async void RescanList_Click(object sender, RoutedEventArgs e) => await RescanAsync([.. _folders]);
+
+    private async void RescanAll_Click(object sender, RoutedEventArgs e) => await RescanAsync(AllFolders());
+
+    // Files already listed keep their status unless they changed since they finished, and ones gone from disk stay listed with their results.
+    // Missing folders are skipped but kept, since a drive or share may only be offline.
+    private async Task RescanAsync(List<string> folders)
     {
-        int added = 0, missing = 0;
-        foreach (var folder in _folders.Concat(_history.Folders).Distinct(StringComparer.OrdinalIgnoreCase).ToList())
+        int added = 0;
+        List<string> scanned = [], missing = [];
+        foreach (var folder in folders)
         {
-            if (Directory.Exists(folder)) added += await AddFolderAsync(folder);
-            else missing++;
+            if (!Directory.Exists(folder))
+            {
+                missing.Add(folder);
+                continue;
+            }
+            // Already remembered, and adding history folders to this list would blur the two rescan scopes.
+            added += await AddFolderAsync(folder, remember: false);
+            scanned.Add(folder);
         }
+
+        // ponytail: names the first few; a list of hundreds would not fit the info bar.
+        static string Names(List<string> f) => string.Join(", ", f.Take(5)) + (f.Count > 5 ? $", and {f.Count - 5} more" : "");
         var message = added == 0 ? "No new or changed videos found." : $"Queued {added} new or changed video{(added == 1 ? "" : "s")}.";
-        if (missing > 0) message += $" {missing} folder{(missing == 1 ? " was" : "s were")} not found.";
-        ShowInfo(missing > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Informational, message);
+        if (scanned.Count > 0) message += $" Scanned {scanned.Count} folder{(scanned.Count == 1 ? "" : "s")}: {Names(scanned)}.";
+        if (missing.Count > 0) message += $" Not found: {Names(missing)}.";
+        ShowInfo(missing.Count > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Informational, message);
     }
 
     private void Remove_Click(object sender, RoutedEventArgs e)
@@ -551,7 +572,7 @@ public sealed partial class ConverterPage : Page
         // A session can come from elsewhere; say where conversions will now be written.
         var output = session.Options is { SameFolder: false, OutputFolder: { Length: > 0 } f } ? $" Output folder: {f}." : "";
         ShowInfo(warning is null ? InfoBarSeverity.Success : InfoBarSeverity.Warning,
-            $"Loaded {session.Items.Count} files.{output} Rescan folders to queue videos added since.{(warning is null ? "" : " " + warning)}");
+            $"Loaded {session.Items.Count} files.{output} Files > Rescan this list's folders queues videos added since.{(warning is null ? "" : " " + warning)}");
     }
 
     private async void Autosave_Click(object sender, RoutedEventArgs e)
@@ -1451,7 +1472,11 @@ public sealed partial class ConverterPage : Page
         RemoveButton.IsEnabled = DeleteSelectedButton.IsEnabled = !_adding && Queue.SelectedItems.Count > 0;
         // The Files dropdown is off while busy or adding, so these only track whether there is anything to act on.
         ClearItem.IsEnabled = _items.Count > 0;
-        RescanItem.IsEnabled = _folders.Count > 0 || _history.Folders.Count > 0;
+        var allFolders = AllFolders().Count;
+        RescanListItem.Text = $"Rescan this list's folders ({_folders.Count})";
+        RescanListItem.IsEnabled = _folders.Count > 0;
+        RescanAllItem.Text = $"Rescan all history folders ({allFolders})";
+        RescanAllItem.IsEnabled = allFolders > 0;
         SaveSessionItem.IsEnabled = !_adding && _items.Count > 0;
         LoadSessionItem.IsEnabled = !busy && !_adding;
         // Also runs while startup reads the previous session.

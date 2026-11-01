@@ -88,8 +88,15 @@
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
                             <MenuFlyoutSeparator />
-                            <MenuFlyoutItem x:Name="RescanItem" Text="Rescan folders" Click="Rescan_Click" IsEnabled="False"
-                                            ToolTipService.ToolTip="Look in every folder added before, in this list or the history, for videos that are new or changed since they were processed, and queue them">
+                            <!-- Texts carry folder counts, filled in by SetBusy. -->
+                            <MenuFlyoutItem x:Name="RescanListItem" Text="Rescan this list's folders" Click="RescanList_Click" IsEnabled="False"
+                                            ToolTipService.ToolTip="Look in the folders added to this list for videos that are new or changed since they were processed, and queue them">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE72C;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Name="RescanAllItem" Text="Rescan all history folders" Click="RescanAll_Click" IsEnabled="False"
+                                            ToolTipService.ToolTip="Look in every folder added before, in this list or any other, for videos that are new or changed since they were processed, and queue them">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE72C;" />
                                 </MenuFlyoutItem.Icon>
